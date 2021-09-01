@@ -1,7 +1,5 @@
 #!/usr/bin/python
 
-# caca
-
 from tkinter import *
 import jetson.inference
 import jetson.utils

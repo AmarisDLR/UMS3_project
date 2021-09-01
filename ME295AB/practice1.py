@@ -1,7 +1,9 @@
 import cv2 
 
 key = cv2. waitKey(1)
-webcam = cv2.VideoCapture(0)
+webcam = cv2.VideoCapture('v4l2src device=/dev/video0 ! video/x-raw, format=YUYV, width=1280, height=960 ! videoconvert ! video/x-raw, format=BGR ! appsink')
+
+
 while True:
     try:
         check, frame = webcam.read()
