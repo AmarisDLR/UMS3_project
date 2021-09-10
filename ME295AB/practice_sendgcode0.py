@@ -19,6 +19,15 @@ remote_connection.send("help\n")
 out = remote_connection.recv(9999)
 print(out)
 
+commands = ["sendgcode G28","sendgcode G0 X32", "sendgcode G0 Y32", "sendgcode G0 X52", "sendgcode G0 X52"]
+
+for command in commands:
+
+		print(command)
+		remote_connection.send(command+"\n")
+		out = remote_connection.recv(9999)
+		print(out)
+
 while True:
 	try:
 		command = input("Enter command: ")
@@ -31,3 +40,6 @@ while True:
 	except(KeyboardInterrupt):
 		print("Exit program")
 		ssh.close()
+
+
+ssh.close()
