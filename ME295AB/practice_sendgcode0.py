@@ -1,4 +1,5 @@
 import paramiko
+import time
 
 ip_address = "10.1.10.203"
 username = "ultimaker"
@@ -19,23 +20,32 @@ remote_connection.send("help\n")
 out = remote_connection.recv(9999)
 print(out)
 
-commands = ["sendgcode G28","sendgcode G0 X32", "sendgcode G0 Y32", "sendgcode G0 X52", "sendgcode G0 X52"]
+commands = ["sendgcode G28 Z200","sendgcode G0 Z32", "M400"] #, "get current_temperature", "sendgcode M114","sendgcode M114","sendgcode M114"]
 
-for command in commands:
+#for command in commands:
 
-		print(command)
-		remote_connection.send(command+"\n")
-		out = remote_connection.recv(9999)
-		print(out)
+		#print(command)
+		#remote_connection.send(command+"\n")
+		#out = remote_connection.recv(9999)
+		#print(out)
 
+count = 0
 while True:
 	try:
-		command = input("Enter command: ")
-		#print(command)
-		remote_connection.send(command)
-		remote_connection.send("\n")
-		output = remote_connection.recv(9999)
-		print(output)
+		for command in commands:
+			count += 1
+			time.sleep(1)
+			#command = input("Enter command: ")
+			#print(command)
+			remote_connection.send(command)
+			remote_connection.send("\n")
+			output = remote_connection.recv(9999)
+			print(output)
+			print(str(count)+"\n")
+			print("\n")
+		
+		
+		#break
 
 	except(KeyboardInterrupt):
 		print("Exit program")
