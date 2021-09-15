@@ -3,7 +3,7 @@ import time
 import calendar
 import re
 import paramiko
-
+import cv2
 
 def find_init_temperature(gfile):
 # First, find the initial temperature
@@ -51,11 +51,16 @@ def zero_bed(gfile, offset, remote_connection):
 	with open(gfile) as gcode:
 		for i, line in enumerate(gcode):
 			if i ==30:
+				time.sleep(1)
 				remote_connection.send("select printer printer\n")
 				remote_connection.send("set max_speed_z 15\n")
 				remote_connection.send("sendgcode G0 Z"+offset+"\n")
-				remote_connection.send("sendgcode G92 Z0\n")	
+				remote_connection.send("sendgcode G92 Z0\n")
+				out = remote_connection.recv(9999)
+				print(out)	
 				remote_connection.send("set max_speed_z 40\n")
+				out = remote_connection.recv(9999)
+				print(out)
 				break
 
 def set_time_elapsed(gfile, times_file):
@@ -99,6 +104,32 @@ def get_XY(line):
 	Y = float(Y[0])
 	return X,Y
 
+def capture_img(camera):
+	cam_fps = camera.get(cv2.CAP_PROP_FPS)
+	print('Capture Image at %.2f FPS.' %cam_fps)
+	ts = calendar.timegm(time.gmtime())
+	imfile = str(ts)+'img.jpg'
+	print(imfile)	
+	cv2.imwrite(filename=imfile, img=frame)
+	print("Image saved!")
+
+def video_capture(webcam):
+	count = 1
+	t = True
+	while t:
+		try:
+			count += 1
+			print("\n\n"+str(count)+"\n\n")
+			check, frame = webcam.read()
+			cv2.imshow("Capturing", frame)
+			key = cv2.waitKey(1)
+			if count == 150: 
+				capture_img(webcam)
+				t = False
+				break
+		except(KeyboardInterrupt):
+			cv2.destroyAllWindows()
+			break
 ################  Log in to SSH  ##################
 ip_address = "10.1.10.203"
 username = "ultimaker"
@@ -121,9 +152,7 @@ out = remote_connection.recv(9999)
 print(out)
 
 ################  Get & Send Temperature  ##################
-
 print("\n\n\n\n")
-
 gfile = "UMgcode/square.gcode" #input("Name of gcode file to print: <file.gcode> \n")
 times_file = "times.txt"
 print(gfile+"\n")
@@ -131,11 +160,19 @@ extruder_temp, bed_temp = find_init_temperature(gfile)
 set_temperature(extruder_temp, bed_temp, remote_connection)
 
 ################  Get Times Btwn Layers  ##################
-
 set_time_elapsed(gfile, times_file)
 
-################ Start Printing  ##################
+################  Start Printing  ##################
+key = cv2.waitKey(1)
+webcam = cv2.VideoCapture(0)
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 800)#640)
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)#480)
+webcam.set(cv2.CAP_PROP_FPS, 25)#30)
+
+################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
+
+z_offset = input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
@@ -149,8 +186,11 @@ while True:
 	try:
 
 		line = gfile_print.readline()
+		check, frame = webcam.read()
+		cv2.imshow("Capturing", frame)
+		key = cv2.waitKey(1)
 
-		if not line: 
+		if not line: ### End of File ###
 			print("\nFinished printing. \n")
 			remote_connection.send("sendgcode G28 \n")
 			remote_connection.send("sendgcode G0 Z60\n")
@@ -159,10 +199,12 @@ while True:
 			remote_connection.send("set pre_tune_target_temperature "+ "0 "+" \n")
 			remote_connection.send("sendgcode G28 \n")
 			ssh.close()
+			cv2.destroyAllWindows()
+
 			break
 
 		else: #### Print g-code ####
-			time.sleep(0.01)
+			time.sleep(0.001)
 			print(linecount,layerbreak)
 			#print("\n\n"+str(linecount)+"\n\n")
 			#print(line)
@@ -171,7 +213,7 @@ while True:
 
 			if linecount == 30: #### Zero Bed Offset ####
 				print(line)
-				z_offset = input("\nEnter height to zero bed: ")
+				remote_connection.send("sendgcode G0 Z20.001 \n")
 				zero_bed(gfile,z_offset,remote_connection)
 
 			if linecount == layerbreak-2:
@@ -186,8 +228,16 @@ while True:
 
 			if linecount == layerbreak: ## Take image
 				print("\n\nLine " + str(linecount) + ": Pause " + str(elapsed_time) + " s\n\n")
-				time.sleep(float(elapsed_time))
-
+				
+				remote_connection.send("sendgcode G0 X22 Y100 Z100\n") ## Position for camera capture
+				out = remote_connection.recv(9999)
+				u = input("\nopen video capure\n")
+				video_capture(webcam)
+				print("\n\nPause\n\n")
+				gpositions = "X"+str(X)+" Y"+str(Y)+" Z"+str(Z)
+				remote_connection.send("sendgcode G0 "+gpositions+"\n")	## Return to last position		
+				time.sleep(15)#float(elapsed_time+5))
+				
 				#update layerbreak and time_break
 				elapsed_time, layerbreak = get_time_elapsed(times)
 
@@ -200,8 +250,11 @@ while True:
 		remote_connection.send("set pre_tune_target_temperature "+ "0 "+" \n")
 		remote_connection.send("get current temperature \n")
 		remote_connection.send("sendgcode G28 \n")
-		os.remove(times_file)
+		#os.remove(times_file)
 		ssh.close()
+		cv2.destroyAllWindows()
 		break
+
 ssh.close()
-os.remove(times_file)
+#os.remove(times_file)
+cv2.destroyAllWindows()
