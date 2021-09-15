@@ -1,5 +1,7 @@
 import re
 import time
+import cv2
+import calendar
 
 gfile = "UMgcode/square.gcode"
 
@@ -87,29 +89,76 @@ def get_time_elapsed(times_file):
 	time_line = int(time_line[0])
 	return elapsed_time, time_line
 
+def capture_img(camera):
+	cam_fps = camera.get(cv2.CAP_PROP_FPS)
+	print('Capture Image at %.2f FPS.' %cam_fps)
+	ts = calendar.timegm(time.gmtime())
+	imfile = str(ts)+'img.jpg'
+	print(imfile)	
+	cv2.imwrite(filename=imfile, img=frame)
+	print("Image saved!")
+
+def video_capture(webcam):
+	count = 1
+	t = True
+	while t:
+		try:
+			count += 1
+			print("\n\n"+str(count)+"\n\n")
+			check, frame = webcam.read()
+			#cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+			cv2.imshow("Capturing", frame)
+			key = cv2.waitKey(1)
+			if count == 50: 
+				capture_img(webcam)
+				t = False
+				break
+		except(KeyboardInterrupt):
+			cv2.destroyAllWindows()
+			break
+		
+webcam = cv2.VideoCapture(0)
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 800)#640)
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)#480)
+webcam.set(cv2.CAP_PROP_FPS, 25)#30)
+
 times_file = "times.txt"
 linecount = 1
 times = open(times_file,"r")
 
+gfile_print = open(gfile, "r")
+
 elapsed_time, layerbreak = get_time_elapsed(times)
 print(elapsed_time, layerbreak)
 
+
 while True:
 	try:
-		time.sleep(.1)
+		time.sleep(.001)
+		line = gfile_print.readline()
 		print(linecount)
+		check, frame = webcam.read()
+		#cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+		cv2.imshow("Capturing", frame)
+		key = cv2.waitKey(1)
+
 
 		if linecount == layerbreak:
-			#time.sleep(float(elapsed_time))
+			u = input("\nopen video capure\n")
+			video_capture(webcam)
 			elapsed_time, layerbreak = get_time_elapsed(times)
 			print(elapsed_time, layerbreak)
+			u = input("\nlayerbreak\n")
+			
 
-		#print(elapsed_time, layerbreak)
-		#u = input("\n\nget_time_elapsed\n\n")
+		if not line:
+			print("\n\nEnd of file\n\n")
+			break
 
 		linecount += 1
 
 	except(KeyboardInterrupt):
-		break
+		webcam.release()
+		cv2.destroyAllWindows()
 		print("\nExit program.\n")
-
+		break

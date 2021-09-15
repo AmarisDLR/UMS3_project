@@ -26,7 +26,7 @@ print("Click terminal window: use CTRL+c to close camera and quit program.\n")
 print("Click on camera stream window: use 's' to save image.")
 print("\n\n")
 
-count = 0
+count = 1
 while True:
 	try:
 		count += 1
