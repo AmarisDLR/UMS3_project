@@ -24,30 +24,26 @@ def find_init_temperature(gfile):
 				break
 
 def set_temperature(extruder_temp, bed_temp, remote_connection):
-	print("\nInitial Extruder Temperature: " + str(extruder_temp) + " F\n")		
-	out = remote_connection.recv(9999)	
+	print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
+	print("\nTarget Bed Temperature: " + str(bed_temp) + " F\n")		
 	remote_connection.send("select printer printer/head/0/slot/0 \n")
-	#remote_connection.send("set pre_tune_target_temperature "+ str(extruder_temp)+" \n")	
+	remote_connection.send("set pre_tune_target_temperature "+ str(extruder_temp)+" \n")	
 	time.sleep(2)
 	remote_connection.send("get current_temperature \n")
 	time.sleep(2)
 	out = str(remote_connection.recv(9999))
 	out = out[-16:-1]
 	current_ex_temp = re.findall(r'[\d.\d]+', out) # current extruder temperature ex. 29.4 --> ['29', '4']
-	print(current_ex_temp)
+	#print(current_ex_temp)
 	remote_connection.send("select printer printer/bed \n")
 	time.sleep(2)
-
-	#remote_connection.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
+	remote_connection.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
 
 	print("\n\nStart heating\n\n")
 	#time.sleep(230)
-	input("\n\nstop\n\n")
+	input("\n\nStop heating\n\n")
 
 def zero_bed(gfile, offset, remote_connection): 
-	out = remote_connection.recv(9999)
-	print(out)
-
 	with open(gfile) as gcode:
 		for i, line in enumerate(gcode):
 			if i ==30:
@@ -56,19 +52,14 @@ def zero_bed(gfile, offset, remote_connection):
 				remote_connection.send("set max_speed_z 15\n")
 				remote_connection.send("sendgcode G0 Z"+offset+"\n")
 				remote_connection.send("sendgcode G92 Z0\n")
-				out = remote_connection.recv(9999)
-				print(out)	
 				remote_connection.send("set max_speed_z 40\n")
 				out = remote_connection.recv(9999)
-				print(out)
-				break
 
 def set_time_elapsed(gfile, times_file):
 	times = open(times_file,"w+")
 	time1 = 0
 	count = 1
 	with open(gfile) as gcode:
-		print(gfile)
 		for line in gcode:
 			line = line.strip()
 			timeline = re.findall(';TIME_ELAPSED:', line)
@@ -118,18 +109,40 @@ def video_capture(webcam):
 	t = True
 	while t:
 		try:
+			time.sleep(0.001)
 			count += 1
 			print("\n\n"+str(count)+"\n\n")
 			check, frame = webcam.read()
 			cv2.imshow("Capturing", frame)
 			key = cv2.waitKey(1)
-			if count == 150: 
+			if count == 500: 
 				capture_img(webcam)
 				t = False
+				time.sleep(2)
 				break
 		except(KeyboardInterrupt):
 			cv2.destroyAllWindows()
 			break
+def print_initial_lines(remote_connection):
+	remote_connection.send("sendgcode G92 E0\n")
+	remote_connection.send("sendgcode G0 X0 Y175\n")
+	remote_connection.send("sendgcode G0 F1000 Y50 E2\n") 
+	remote_connection.send("sendgcode G0 X5\n")
+	remote_connection.send("sendgcode G0 Y175 E4.5\n")
+	remote_connection.send("sendgcode G0 X10\n")
+	remote_connection.send("sendgcode G0 Y175\n") 
+
+def adjust_extruder(remote_connection, flag):
+	remote_connection.send("sendgcode G91\n")	## Set Relative Positioning
+	if flag == 1:
+		## Retract extruder
+		remote_connection.send("sendgcode G0 F2000 E-5\n")
+	else:
+		## Move extruder forward
+		remote_connection.send("sendgcode G0 F500 E5\n")
+
+	remote_connection.send("sendgcode G90\n")	## Set Absolute Positioning
+	
 ################  Log in to SSH  ##################
 ip_address = "10.1.10.203"
 username = "ultimaker"
@@ -180,7 +193,8 @@ linecount = 1
 
 elapsed_time, layerbreak = get_time_elapsed(times)
 print(elapsed_time, layerbreak)
-u = input("\n\nget_time_elapsed\n\n")
+print_initial_lines(remote_connection)
+time.sleep(15)
 
 while True:
 	try:
@@ -193,8 +207,6 @@ while True:
 		if not line: ### End of File ###
 			print("\nFinished printing. \n")
 			remote_connection.send("sendgcode G28 \n")
-			remote_connection.send("sendgcode G0 Z60\n")
-
 			command = input("\nConfirm piece is removed from print bed by hitting 'enter'. \n")
 			remote_connection.send("set pre_tune_target_temperature "+ "0 "+" \n")
 			remote_connection.send("sendgcode G28 \n")
@@ -208,13 +220,15 @@ while True:
 			print(linecount,layerbreak)
 			#print("\n\n"+str(linecount)+"\n\n")
 			#print(line)
-			#remote_connection.send("sendgcode " +line +" \n")
+			remote_connection.send("sendgcode " +line +" \n")
 			#out = remote_connection.recv(9999)
 
 			if linecount == 30: #### Zero Bed Offset ####
 				print(line)
 				remote_connection.send("sendgcode G0 Z20.001 \n")
 				zero_bed(gfile,z_offset,remote_connection)
+				print_initial_lines(remote_connection)
+				time.sleep(5)
 
 			if linecount == layerbreak-2:
 				print("\n\nGet Z\n\n")
@@ -228,16 +242,20 @@ while True:
 
 			if linecount == layerbreak: ## Take image
 				print("\n\nLine " + str(linecount) + ": Pause " + str(elapsed_time) + " s\n\n")
-				
-				remote_connection.send("sendgcode G0 X22 Y100 Z100\n") ## Position for camera capture
-				out = remote_connection.recv(9999)
-				u = input("\nopen video capure\n")
-				video_capture(webcam)
 				print("\n\nPause\n\n")
+				time.sleep(float(elapsed_time+2))
+
+				remote_connection.send("sendgcode G0 X22 Y100 Z100\n") ## Position for camera capture
+				adjust_extruder(remote_connection, 1) ## Retract extruder
+				#u = input("\nopen video capure\n")
+				video_capture(webcam)
+				
+				adjust_extruder(remote_connection, 0) ## Return extruder
 				gpositions = "X"+str(X)+" Y"+str(Y)+" Z"+str(Z)
 				remote_connection.send("sendgcode G0 "+gpositions+"\n")	## Return to last position		
-				time.sleep(15)#float(elapsed_time+5))
 				
+				time.sleep(float(1.5))
+
 				#update layerbreak and time_break
 				elapsed_time, layerbreak = get_time_elapsed(times)
 
@@ -247,14 +265,14 @@ while True:
 	#### Escape/Close Program ####
 	except(KeyboardInterrupt):
 		print("\nExit program.\n")
-		remote_connection.send("set pre_tune_target_temperature "+ "0 "+" \n")
-		remote_connection.send("get current temperature \n")
-		remote_connection.send("sendgcode G28 \n")
+		set_temperature(0, 0, remote_connection)
+		remote_connection.send("sendgcode G28 Z\n")
 		#os.remove(times_file)
 		ssh.close()
 		cv2.destroyAllWindows()
 		break
 
+set_temperature(0, 0, remote_connection)
 ssh.close()
 #os.remove(times_file)
 cv2.destroyAllWindows()
