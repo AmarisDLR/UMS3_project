@@ -2,7 +2,7 @@ import cv2
 import time
 import calendar
 
-def capture_img(camera):
+def capture_img(camera, frame):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
 	ts = calendar.timegm(time.gmtime())
@@ -36,7 +36,7 @@ while True:
 		cv2.imshow("Capturing", frame)
 		key = cv2.waitKey(1)
 		if key == ord('s'): 
-			capture_img(webcam)
+			capture_img(webcam, frame)
 			print("\n\n")
 			print("Click terminal window: use CTRL+C to close camera and quit program.\n")
 			print("Click on camera stream window: use 's' to save image.")
