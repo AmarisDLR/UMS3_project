@@ -4,6 +4,7 @@ import calendar
 import re
 import paramiko
 import cv2
+from tqdm import tqdm
 
 def find_init_temperature(gfile):
 # First, find the initial temperature
@@ -20,12 +21,11 @@ def find_init_temperature(gfile):
 			if btemp:
 				bed_temp = line.split(":",1)[1]
 			if extruder_temp and bed_temp:
-				return extruder_temp, bed_temp
+				return float(extruder_temp), float(bed_temp)
 				break
 
-def set_temperature(extruder_temp, bed_temp, remote_connection):
-	print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
-	print("\nTarget Bed Temperature: " + str(bed_temp) + " F\n")		
+def set_temperature(extruder_temp, bed_temp, remote_connection, start):
+		
 	remote_connection.send("select printer printer/head/0/slot/0 \n")
 	remote_connection.send("set pre_tune_target_temperature "+ str(extruder_temp)+" \n")	
 	time.sleep(2)
@@ -34,14 +34,20 @@ def set_temperature(extruder_temp, bed_temp, remote_connection):
 	out = str(remote_connection.recv(9999))
 	out = out[-16:-1]
 	current_ex_temp = re.findall(r'[\d.\d]+', out) # current extruder temperature ex. 29.4 --> ['29', '4']
-	#print(current_ex_temp)
 	remote_connection.send("select printer printer/bed \n")
 	time.sleep(2)
 	remote_connection.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
+	if start ==1:	
+		print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
+		print("Target Bed Temperature: " + str(bed_temp) + " F\n")
+		remote_connection.send("sendgcode G0 E2\n")
+		print("\n\nStart heating\n\n")
+		input("\n\nStop heating\n\n")
+	if start == 0:
+		print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
+		print("Target Bed Temperature: " + str(bed_temp) + " F\n")
 
-	print("\n\nStart heating\n\n")
-	#time.sleep(230)
-	input("\n\nStop heating\n\n")
+
 
 def zero_bed(gfile, offset, remote_connection): 
 	with open(gfile) as gcode:
@@ -68,6 +74,7 @@ def set_time_elapsed(gfile, times_file):
 				time2 = float(time2[0])
 				time_elapsed = time2 - time1
 				times.write(str(time_elapsed)+","+str(count)+"\n")
+				time1 = time2
 			count += 1
 
 def get_time_elapsed(times_file):
@@ -95,51 +102,84 @@ def get_XY(line):
 	Y = float(Y[0])
 	return X,Y
 
-def capture_img(camera):
+def check_position(X,Y,Z,remote_connection, webcam, layerbreak):
+	t = 1
+	count = 0
+	while t:
+		count += 1
+		time.sleep(0.001)
+		remote_connection.send("sendgcode M114\n")
+		out = remote_connection.recv(9999)
+		out = str(out)
+		print(out)
+		xyz_str = re.search(':(.+?)E',out)
+		if xyz_str:
+			positions = xyz_str.group(1)
+			xyz_items = positions.split(':')
+			if len(xyz_items) == 3:
+				xc = re.findall(r'[\d.\d]+', xyz_items[0])
+				yc = re.findall(r'[\d.\d]+', xyz_items[1])
+				zc = re.findall(r'[\d.\d]+', xyz_items[2])
+				xc = float(xc[0])
+				yc = float(yc[0])
+				zc = float(zc[0])
+				print(xc,yc,zc)
+				print(X,Y,Z)
+				if xc == X and yc == Y and zc == Z:
+					video_capture(webcam, layerbreak)
+					t = 0
+					return 0
+					break
+			if count > 100:
+				t = 0
+				return 1
+				break
+
+def capture_img(camera, frame, layerbreak):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
 	ts = calendar.timegm(time.gmtime())
-	imfile = str(ts)+'img.jpg'
-	print(imfile)	
+	imfile = str(ts)+"_"+str(layerbreak)+'img.jpg'
+	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
 
-def video_capture(webcam):
+def video_capture(webcam, layerbreak):
 	count = 1
 	t = True
 	while t:
 		try:
 			time.sleep(0.001)
 			count += 1
-			print("\n\n"+str(count)+"\n\n")
 			check, frame = webcam.read()
 			cv2.imshow("Capturing", frame)
 			key = cv2.waitKey(1)
-			if count == 500: 
-				capture_img(webcam)
+			if count == 450: 
+				capture_img(webcam, frame, layerbreak)
 				t = False
 				time.sleep(2)
 				break
 		except(KeyboardInterrupt):
 			cv2.destroyAllWindows()
 			break
+
 def print_initial_lines(remote_connection):
 	remote_connection.send("sendgcode G92 E0\n")
+	remote_connection.send("sendgcode G0 Z0.24\n")
 	remote_connection.send("sendgcode G0 X0 Y175\n")
-	remote_connection.send("sendgcode G0 F1000 Y50 E2\n") 
+	remote_connection.send("sendgcode G0 F1200 Y50 E6\n") 
 	remote_connection.send("sendgcode G0 X5\n")
-	remote_connection.send("sendgcode G0 Y175 E4.5\n")
+	remote_connection.send("sendgcode G0 Y175 E8\n")
 	remote_connection.send("sendgcode G0 X10\n")
-	remote_connection.send("sendgcode G0 Y175\n") 
+	remote_connection.send("sendgcode G0 Y175\n")
+	remote_connection.send("sendgcode G0 E9\n")
 
 def adjust_extruder(remote_connection, flag):
 	remote_connection.send("sendgcode G91\n")	## Set Relative Positioning
 	if flag == 1:
 		## Retract extruder
-		remote_connection.send("sendgcode G0 F2000 E-5\n")
-	else:
-		## Move extruder forward
-		remote_connection.send("sendgcode G0 F500 E5\n")
+		remote_connection.send("sendgcode G0 F4000 E-1\n")
+		time.sleep(2)
 
 	remote_connection.send("sendgcode G90\n")	## Set Absolute Positioning
 	
@@ -164,18 +204,19 @@ remote_connection.send("sendgcode G28 \n")
 out = remote_connection.recv(9999)
 print(out)
 
-################  Get & Send Temperature  ##################
-print("\n\n\n\n")
-gfile = "UMgcode/square.gcode" #input("Name of gcode file to print: <file.gcode> \n")
-times_file = "times.txt"
-print(gfile+"\n")
-extruder_temp, bed_temp = find_init_temperature(gfile)
-set_temperature(extruder_temp, bed_temp, remote_connection)
-
 ################  Get Times Btwn Layers  ##################
+print("\n\n\n\n")
+gfile = "UMgcode/minisquare.gcode" #input("Name of gcode file to print: <file.gcode> \n")
+print(gfile+"\n")
+times_file = "times.txt"
 set_time_elapsed(gfile, times_file)
 
-################  Start Printing  ##################
+################  Get & Send Temperature  ##################
+
+extruder_temp, bed_temp = find_init_temperature(gfile)
+set_temperature(extruder_temp, bed_temp, remote_connection,1)
+
+################  Start Camera  ##################
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(0)
 webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 800)#640)
@@ -191,10 +232,10 @@ gfile_print = open(gfile, "r")
 times = open(times_file,"r")
 linecount = 1
 
+elapsed_time0 = 0
 elapsed_time, layerbreak = get_time_elapsed(times)
 print(elapsed_time, layerbreak)
-print_initial_lines(remote_connection)
-time.sleep(15)
+time.sleep(2)
 
 while True:
 	try:
@@ -205,58 +246,65 @@ while True:
 		key = cv2.waitKey(1)
 
 		if not line: ### End of File ###
+			
 			print("\nFinished printing. \n")
-			remote_connection.send("sendgcode G28 \n")
+			set_temperature(0, 0, remote_connection,0)
+			remote_connection.send("sendgcode G0 F5500 X0 Y150\n")
+			remote_connection.send("sendgcode G28 Z\n")
 			command = input("\nConfirm piece is removed from print bed by hitting 'enter'. \n")
-			remote_connection.send("set pre_tune_target_temperature "+ "0 "+" \n")
-			remote_connection.send("sendgcode G28 \n")
+			remote_connection.send("sendgcode G28 Z\n")
 			ssh.close()
 			cv2.destroyAllWindows()
-
 			break
 
 		else: #### Print g-code ####
 			time.sleep(0.001)
-			print(linecount,layerbreak)
-			#print("\n\n"+str(linecount)+"\n\n")
-			#print(line)
-			remote_connection.send("sendgcode " +line +" \n")
-			#out = remote_connection.recv(9999)
+			print("Line Sent to Printer: "+str(linecount)+" out of "+str(layerbreak))
+			remote_connection.send("sendgcode "+line+"\n")
 
 			if linecount == 30: #### Zero Bed Offset ####
-				print(line)
 				remote_connection.send("sendgcode G0 Z20.001 \n")
 				zero_bed(gfile,z_offset,remote_connection)
 				print_initial_lines(remote_connection)
-				time.sleep(5)
+				time.sleep(2)
 
 			if linecount == layerbreak-2:
-				print("\n\nGet Z\n\n")
 				Z = get_Z(line)
-				print(Z)
 			
 			if linecount == layerbreak-1:
-				print("\n\nGet X and Y\n\n")
 				X,Y = get_XY(line)
-				print(X,Y)
 
 			if linecount == layerbreak: ## Take image
-				print("\n\nLine " + str(linecount) + ": Pause " + str(elapsed_time) + " s\n\n")
-				print("\n\nPause\n\n")
-				time.sleep(float(elapsed_time+2))
-
-				remote_connection.send("sendgcode G0 X22 Y100 Z100\n") ## Position for camera capture
-				adjust_extruder(remote_connection, 1) ## Retract extruder
-				#u = input("\nopen video capure\n")
-				video_capture(webcam)
 				
-				adjust_extruder(remote_connection, 0) ## Return extruder
+				print("\n\nLayer: " + str(linecount) +"\n\n")
+
+				## Retract extruder
+				set_temperature(extruder_temp-5, bed_temp, remote_connection,2)
+				adjust_extruder(remote_connection, 1)
+				## Position for camera capture
+				goal_X = 10
+				goal_Y = 130+(linecount%2)/10
+				goal_Z = 50
+				remote_connection.send("sendgcode M400")
+				out = remote_connection.recv(9999)
+				remote_connection.send("sendgcode G0 F5000 X0 Y150 "+ "Z"+str(goal_Z)+"\n")
+				## Sleep for estimated time for layer			
+				for t in tqdm(range(int(elapsed_time)), desc = "Print Progress"):				
+					time.sleep(1)
+				remote_connection.send("sendgcode G0 F5000 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z)+"\n")
+				
+				i = 1
+				while i == 1:
+						i = check_position(goal_X,goal_Y,goal_Z,remote_connection, webcam, layerbreak)
+				
+				## Position to resume printing
+				set_temperature(extruder_temp, bed_temp, remote_connection,2)
+				#adjust_extruder(remote_connection, 0) ## Return extruder
 				gpositions = "X"+str(X)+" Y"+str(Y)+" Z"+str(Z)
 				remote_connection.send("sendgcode G0 "+gpositions+"\n")	## Return to last position		
-				
-				time.sleep(float(1.5))
+				time.sleep(2)
 
-				#update layerbreak and time_break
+				## Update layerbreak and time_break
 				elapsed_time, layerbreak = get_time_elapsed(times)
 
 			linecount += 1
@@ -265,14 +313,13 @@ while True:
 	#### Escape/Close Program ####
 	except(KeyboardInterrupt):
 		print("\nExit program.\n")
-		set_temperature(0, 0, remote_connection)
+		set_temperature(0, 0, remote_connection,0)
+		remote_connection.send("sendgcode G0 F5500 X0 Y150\n")
 		remote_connection.send("sendgcode G28 Z\n")
-		#os.remove(times_file)
-		ssh.close()
 		cv2.destroyAllWindows()
 		break
 
-set_temperature(0, 0, remote_connection)
+set_temperature(0, 0, remote_connection,0)
 ssh.close()
-#os.remove(times_file)
+os.remove(times_file)
 cv2.destroyAllWindows()
