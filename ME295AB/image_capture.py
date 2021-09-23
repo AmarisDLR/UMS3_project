@@ -2,11 +2,11 @@ import cv2
 import time
 import calendar
 
-def capture_img(camera, frame):
+def capture_img(path, camera, frame):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
 	ts = calendar.timegm(time.gmtime())
-	imfile = str(ts)+'img.jpg'
+	imfile = "defects/"+str(ts)+'img.jpg'
 	print(imfile)	
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
@@ -15,11 +15,13 @@ print("\n\n")
 print("Program to save images as .jpg\n")
 print("\n\n")
 
+path = "Desktop/UMS3_project/ME295AB/defects"
+
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(0)
-webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 800)#640)
-webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)#480)
-webcam.set(cv2.CAP_PROP_FPS, 25)#30)
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 800)	#640)
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)	#480)
+webcam.set(cv2.CAP_PROP_FPS, 25)		#30)
 
 print("\n\n")
 print("Click terminal window: use CTRL+c to close camera and quit program.\n")
@@ -30,13 +32,13 @@ count = 1
 while True:
 	try:
 		count += 1
-		print("\n\n"+str(count)+"\n\n")
+		#print("\n\n"+str(count)+"\n\n")
 		check, frame = webcam.read()
 		#cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 		cv2.imshow("Capturing", frame)
 		key = cv2.waitKey(1)
 		if key == ord('s'): 
-			capture_img(webcam, frame)
+			capture_img(path, webcam, frame)
 			print("\n\n")
 			print("Click terminal window: use CTRL+C to close camera and quit program.\n")
 			print("Click on camera stream window: use 's' to save image.")
