@@ -90,38 +90,60 @@ def zero_bed(gfile, offset, remote_connection):
 				out = remote_connection.recv(9999)
 
 def set_time_elapsed(gfile, times_file):
+	gfile_read = open(gfile, "r")	
 	times = open(times_file,"w+")
 	time1 = 0
 	count = 1
-	with open(gfile) as gcode:
-		for line in gcode:
-			line = line.strip()
+	Z = 0
+	t = True
+	while t:
+			line = gfile_read.readline()
+			if not line:
+				t = False
+				break
+			mesh_line = re.findall('NONMESH', line)
+			if mesh_line:
+				j = True
+				while j:
+					line = gfile_read.readline()
+					count += 1
+					Z = get_Z(line)
+					if Z > 0:
+						j = False
+						break
 			timeline = re.findall(';TIME_ELAPSED:', line)
 			if timeline:
 				time2 = re.findall(r'[\d.\d]+', line)
 				time2 = float(time2[0])
 				time_elapsed = time2 - time1
-				times.write(str(time_elapsed)+","+str(count)+"\n")
+				times.write(str(time_elapsed)+","+str(count)+","+str(Z)+"\n")
 				time1 = time2
 			count += 1
 
 def get_time_elapsed(times_file):
 	line = times_file.readline()
+
+	if not line: ### End of File ###
+		return -1,-1
+		
 	items = line.split(",")
 	elapsed_time = re.findall(r'[\d.\d]+', items[0])
 	time_line = re.findall(r'[\d.\d]+', items[1])
+	Z = re.findall(r'[\d.\d]+', items[2])
 	elapsed_time = float(elapsed_time[0])
 	time_line = int(time_line[0])
-	return elapsed_time, time_line
+	Z = float(Z[0])
+	return elapsed_time, time_line, Z
 
 def get_Z(line):
 	Z = 0
-	items = line.split("X",1)[1]
-	items = items.split()
-	if len(items) > 2: 
-		Z = re.findall(r'[\d.\d]+', items[2])
-		Z = float(Z[0])
-
+	items = re.findall('Z', line)
+	if items:
+		items = line.split("X",1)[1]
+		items = items.split()	
+		if len(items) > 2: 
+			Z = re.findall(r'[\d.\d]+', items[2])
+			Z = float(Z[0])
 	return Z
 
 def get_XY(line):
@@ -196,24 +218,23 @@ def video_capture(webcam, layerbreak):
 			break
 
 def print_initial_lines(remote_connection):
-	remote_connection.send("sendgcode G0 F600 X0 Z0.24 E13\n")
-	remote_connection.send("sendgcode G4 S10\n")
+	remote_connection.send("sendgcode G0 F600 X0 Z0.24\n")
+	remote_connection.send("sendgcode G0 E10\n")
 	remote_connection.send("sendgcode G92 E0\n")
-	remote_connection.send("sendgcode G0 F1200 X0 Y175\n")
-	remote_connection.send("sendgcode G0 Y50 E6\n") 
+	remote_connection.send("sendgcode G0 F1500 Y180\n")
+	remote_connection.send("sendgcode G0 Y50 E1\n")
 	remote_connection.send("sendgcode G0 X5\n")
-	remote_connection.send("sendgcode G0 Y175 E9\n")
+	remote_connection.send("sendgcode G0 Y180 E0\n")
 	remote_connection.send("sendgcode G0 X10\n")
-	remote_connection.send("sendgcode G0 Y175\n")
-	remote_connection.send("sendgcode G0 F900 E12\n")
+	remote_connection.send("sendgcode G0 F3000 Y50\n")
 	remote_connection.send("sendgcode G92 E0\n")
-	#time.sleep(7)
+	time.sleep(2) 
 
 def adjust_extruder(remote_connection, flag):
 	remote_connection.send("sendgcode G91\n")	## Set Relative Positioning
 	if flag == 1:
 		## Retract extruder
-		remote_connection.send("sendgcode G0 F4000 E-5\n")
+		remote_connection.send("sendgcode G0 F5000 E-5\n")
 		time.sleep(2)
 
 	remote_connection.send("sendgcode G90\n")	## Set Absolute Positioning
@@ -240,7 +261,7 @@ out = remote_connection.recv(9999)
 print(out)
 ################  Get Times Btwn Layers  ##################
 print("\n\n\nn")
-gfile = "UMgcode/square_no_raft_full.gcode" #input("Name of gcode file to print: <file.gcode> \n")
+gfile = "gcodeUM/UMS3_rectangle_4ovals_15infill_lines.gcode" #input("Gcode file: <file.gcode> \n")
 print(gfile+"\n")
 times_file = "times.txt"
 set_time_elapsed(gfile, times_file)
@@ -260,18 +281,18 @@ webcam.set(cv2.CAP_PROP_FPS, 25)#30)
 ################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
 
-z_offset = str(4.25) #input("\nEnter height to zero bed: ")
+z_offset = str(4.2) #input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
 linecount = 1
 
 elapsed_time0 = X_line = Y_line = Z_line = 0
-elapsed_time, layerbreak = get_time_elapsed(times)
+elapsed_time, layerbreak, Z = get_time_elapsed(times)
 time.sleep(2)
 
 goal_X = 10
-goal_Z = 5
+goal_Z = Z+1
 ################  Print Loop  ##################
 while True:
 	try:
@@ -300,15 +321,15 @@ while True:
 			print("Line Sent to Printer: "+str(linecount)+" out of "+str(layerbreak))
 			remote_connection.send("sendgcode "+line+"\n")
 
-			if linecount == 3000: #### Heat up ####
-				extruder_temp = extruder_temp+5
-				set_temperature(extruder_temp, bed_temp, remote_connection,2)
-				time.sleep(2)
+			#if linecount == 3000: #### Heat up ####
+			#	extruder_temp = extruder_temp+7
+			#	set_temperature(extruder_temp, bed_temp, remote_connection,2)
+			#	time.sleep(2)
 
-			if linecount == layerbreak-2:
-				Z_line = get_Z(line)				
-				if Z_line > 0:				
-					Z = Z_line
+			#if linecount == layerbreak-2:
+				#Z_line = get_Z(line)				
+				#if Z_line > 0:				
+					#Z = Z_line
 			
 			if linecount == layerbreak-1:		
 				X_line,Y_line = get_XY(line)
@@ -319,6 +340,7 @@ while True:
 			if linecount == 33: #### Zero Bed Offset ####
 				zero_bed(gfile,z_offset,remote_connection)
 				print_initial_lines(remote_connection)
+				adjust_extruder(remote_connection, 1)
 				time.sleep(2)
 
 			if linecount == layerbreak: ## Take image
@@ -329,8 +351,8 @@ while True:
 				adjust_extruder(remote_connection, 1)
 
 				## Position for camera capture
-				
-				goal_Y = 130+(linecount%2)/10
+				goal_Z = Z+1
+				goal_Y = 125+(linecount%2)/10 #goal_Y = 130+(linecount%2)/10
 				remote_connection.send("sendgcode M400")
 				out = remote_connection.recv(9999)
 				remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
@@ -338,7 +360,7 @@ while True:
 
 				## Sleep for estimated time for layer			
 				for t in tqdm(range(int(elapsed_time)), desc = "Print Progress"):				
-					time.sleep(.96)
+					time.sleep(.90)
 				remote_connection.send("sendgcode G0 F5000 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z)+"\n")
 				
 				i = 1
@@ -356,7 +378,7 @@ while True:
 				time.sleep(2)
 
 				## Update layerbreak and time_break
-				elapsed_time, layerbreak = get_time_elapsed(times)
+				elapsed_time, layerbreak, Z = get_time_elapsed(times)
 
 			linecount += 1
 
