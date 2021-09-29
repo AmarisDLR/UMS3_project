@@ -19,9 +19,9 @@ path = "Desktop/UMS3_project/ME295AB/defects"
 
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(0)
-webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 800)	#640)
-webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)	#480)
-webcam.set(cv2.CAP_PROP_FPS, 25)		#30)
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)		#1280    #1024   #640    #800   #3264
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)		#720	 #768    #480    #600   #2448
+webcam.set(cv2.CAP_PROP_FPS, 15)			#10	 #15     #30     #25    #1.5
 
 print("\n\n")
 print("Click terminal window: use CTRL+c to close camera and quit program.\n")
