@@ -263,7 +263,7 @@ out = remote_connection.recv(9999)
 print(out)
 ################  Get Times Btwn Layers  ##################
 print("\n\n\nn")
-gfile = "gcodeUM/UMS3_random2_35infill_zigzag.gcode" #input("Gcode file: <file.gcode> \n")
+gfile = "gcodeUM/UMS3_random12_30infill_triangles.gcode" #input("Gcode file: <file.gcode> \n")
 print(gfile+"\n")
 times_file = "times.txt"
 set_time_elapsed(gfile, times_file)
@@ -357,7 +357,7 @@ while True:
 				
 				i = 1
 				while i == 1:
-						i = check_position(goal_X,goal_Y,goal_Z,remote_connection, webcam, layerbreak)
+					i = check_position(goal_X,goal_Y,goal_Z,remote_connection, webcam, layerbreak)
 				
 				## Position to resume printing
 				set_temperature(extruder_temp, bed_temp, remote_connection,2)

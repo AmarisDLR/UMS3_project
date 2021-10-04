@@ -187,18 +187,15 @@ def check_position(X,Y,Z,remote_connection, webcam, layerbreak, flag):
 			yc = float(yc[0])
 			zc = float(zc[0])
 			if (xc+0.01>=X or xc-0.01<=X) and (yc+0.01>=Y or yc-0.01<=Y) and (zc+0.01>=Z or zc-0.01<=Z):
-				if flag:
-					video_capture(webcam, layerbreak)
 				return 1
 	else:
 		return 0
-
 
 def capture_img(camera, frame, layerbreak):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
 	ts = calendar.timegm(time.gmtime())
-	imfile = "defects/"+str(ts)+"_"+str(layerbreak)+'img.jpg'
+	imfile = "database/"+str(ts)+"_"+str(layerbreak)+'img.jpg'
 	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
@@ -213,7 +210,7 @@ def video_capture(webcam, layerbreak):
 			check, frame = webcam.read()
 			cv2.imshow("Capturing", frame)
 			key = cv2.waitKey(1)
-			if count == 450: 
+			if count == 500: 
 				capture_img(webcam, frame, layerbreak)
 				t = False
 				time.sleep(2)
@@ -224,17 +221,15 @@ def video_capture(webcam, layerbreak):
 
 def print_initial_lines(remote_connection):
 	remote_connection.send("sendgcode G0 F600 X0 Z0.24\n")
-	remote_connection.send("sendgcode G0 E7\n")
+	remote_connection.send("sendgcode G0 E11\n")
 	time.sleep(3)
 	set_temperature(extruder_temp, bed_temp, remote_connection,2)
 	remote_connection.send("sendgcode G92 E0\n")
 	remote_connection.send("sendgcode G0 F1050 Y180\n")
 	remote_connection.send("sendgcode G0 Y50 E1\n")
 	remote_connection.send("sendgcode G0 F3000 X5 \n")
-	remote_connection.send("sendgcode G0 Y100 E-1.75 \n")
-	#remote_connection.send("sendgcode G0  X10 \n")#E-1
-	#remote_connection.send("sendgcode G0 Y50 \n")
-	remote_connection.send("sendgcode G92 E0\n")
+	remote_connection.send("sendgcode G0 Y100 E-5 \n")# #-(5-6.5)
+	#remote_connection.send("sendgcode G92 E0\n")
 
 def adjust_extruder(remote_connection):
 	remote_connection.send("sendgcode G91\n")	## Set Relative Positioning
@@ -288,7 +283,7 @@ out = remote_connection.recv(9999)
 print(out)
 ################  Get Times Btwn Layers  ##################
 print("\n\n\nn")
-gfile = "gcodeUM/UMS3_random11_22infill_lines.gcode" #input("Gcode file: <file.gcode> \n")
+gfile = "gcodeUM/UMS3_random13_12infill_square.gcode" #input("Gcode file: <file.gcode> \n")
 print(gfile+"\n")
 times_file = "times.txt"
 set_time_elapsed(gfile, times_file)
@@ -319,8 +314,8 @@ timepause = elapsed_time
 time.sleep(2)
 
 goal_X = 10
-goal_Z = Z+3
-fr_factor = 0.725 ## Feedrate adjustment factor
+goal_Z = Z+2
+fr_factor = 1.1 ## Feedrate adjustment factor
 alt_amount = 0.05 ## Extrusion adjustment amount
 ################  Print Loop  ##################
 while True:
@@ -368,7 +363,8 @@ while True:
 			if linecount == 33: #### Zero Bed Offset ####
 				zero_bed(gfile,z_offset,remote_connection)
 				print_initial_lines(remote_connection)
-				for t in tqdm(range(int(10)), desc = "Initialize"):				
+				for t in range(int(8)):
+					print("*",end="",flush=True)			
 					time.sleep(1)
 				print("\n\n")
 				starttime = time.time()
@@ -391,13 +387,13 @@ while True:
 				#	extruder_temp=extruder_temp+5
 				#	set_temperature(extruder_temp, bed_temp, remote_connection,2)
 
-				if layercount % 3 == 1:
-
+				if layercount % 3 == 2:
+####
 					## Retract extruder
 					set_temperature(extruder_temp-45, bed_temp, remote_connection,2)
 					adjust_extruder(remote_connection)
 					## Position for camera capture
-					goal_Z = Z+3
+					goal_Z = Z+1
 					goal_Y = 125+(linecount%2)/10
 					out = remote_connection.recv(9999)
 					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
@@ -406,19 +402,23 @@ while True:
 					## Sleep for estimated time for layer
 					i = 0
 					endtime = time.time()
-					#timediff = 1*(endtime-starttime)*fr_factor
-					for t in tqdm(range(int(abs(timepause))), desc = "Print Progress"):
+					timediff = 1*(endtime-starttime)*fr_factor
+					for t in range(10000000):
+						if t % 2 == 1:
+							print("*",end="",flush=True)
 						i = check_position(0,150,goal_Z,remote_connection, webcam, layerbreak,0)
 						if i == 1:
+							print("G0 X0 Y150 Goal_Z")
 							break
 						time.sleep(1) #0.60
 
 					remote_connection.send("sendgcode G0 F5000 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z)+"\n")
-					
 					## Check if in position for image capture, then capture image
 					i = 0
 					while i == 0:
 						i = check_position(goal_X,goal_Y,goal_Z,remote_connection, webcam, layerbreak,1)
+						if i == 1:
+							video_capture(webcam, layerbreak)
 					## Position to resume printing
 					set_temperature(extruder_temp, bed_temp, remote_connection,2)
 					gpositionXY = "X"+str(X)+" Y"+str(Y)
@@ -429,7 +429,7 @@ while True:
 					time.sleep(2)
 					timepause = 0
 					starttime = time.time()
-
+#####
 				## Update layerbreak and time_break
 				elapsed_time, layerbreak, Z = get_time_elapsed(times)
 				timepause += elapsed_time	
