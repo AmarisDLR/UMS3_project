@@ -6,7 +6,8 @@ def capture_img(path, camera, frame):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
 	ts = calendar.timegm(time.gmtime())
-	imfile = "defects/"+str(ts)+'img.jpg'
+	imfile = "database/compare/"+str(ts)+'1_5fps_3264_2448.jpg'
+	imfile = str(ts)+'1_5fps_1600_1200.jpg'
 	print(imfile)	
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
@@ -19,9 +20,9 @@ path = "Desktop/UMS3_project/ME295AB/defects"
 
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(0)
-webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)		#1280    #1024   #640    #800   #3264
-webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)		#720	 #768    #480    #600   #2448
-webcam.set(cv2.CAP_PROP_FPS, 15)			#10	 #15     #30     #25    #1.5
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)		#1280    #1024   #640    #800   #3264
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)		#720	 #768    #480    #600   #2448
+#webcam.set(cv2.CAP_PROP_FPS, 15)			#10	 #15     #30     #25    #1.5
 
 print("\n\n")
 print("Click terminal window: use CTRL+c to close camera and quit program.\n")

@@ -3,11 +3,9 @@
 
 import os
 import time
-import calendar
 import re
 import paramiko
 import cv2
-from tqdm import tqdm
 
 def find_init_temperature(gfile):
 # First, find the initial temperature
@@ -74,7 +72,7 @@ def check_temperature(extruder_temp, bed_temp,remote_connection):
 		if current_ex_temp:
 			current_ex_temp = float(current_ex_temp[0])
 			if count%2 == 0:		
-				print("*")
+				print("*",end="",flush=True)
 			if  current_bed_temp>=bed_temp-0.5 and current_ex_temp>=extruder_temp-0.5:			
 				#print("\nCurrent bed temperature "+str(current_bed_temp)+"\n")
 				#print("\nCurrent extruder temperature "+str(current_ex_temp)+"\n")			
@@ -91,7 +89,7 @@ def zero_bed(gfile, offset, remote_connection):
 				time.sleep(1)
 				remote_connection.send("select printer printer\n")
 				remote_connection.send("set max_speed_z 15\n")
-				remote_connection.send("sendgcode G0 Z"+offset+"\n")
+				remote_connection.send("sendgcode G0 F450 Z"+offset+"\n")
 				remote_connection.send("sendgcode G92 Z0\n")
 				remote_connection.send("set max_speed_z 40\n")
 				out = remote_connection.recv(9999)
@@ -106,7 +104,10 @@ def set_time_elapsed(gfile, times_file):
 	while t:
 			line = gfile_read.readline()
 			if not line:
+				global final_line
+				final_line = count-1
 				t = False
+				times.write(str(time_elapsed)+","+str(final_line)+","+str(Z+25)+"\n")
 				break
 			mesh_line = re.findall('NONMESH', line)
 			if mesh_line:
@@ -155,17 +156,18 @@ def get_Z(line):
 def get_XY(line):
 	X = 0
 	Y = 0
-	items = line.split("X",1)[1]
-	items = items.split()
-	if len(items) > 1:	
-		X = re.findall(r'[\d.\d]+', items[0])
-		Y = re.findall(r'[\d.\d]+', items[1])
-		X = float(X[0])
-		Y = float(Y[0])
+	if re.findall("X",line):
+		items = line.split("X",1)[1]
+		items = items.split()
+		if len(items) > 1:	
+			X = re.findall(r'[\d.\d]+', items[0])
+			Y = re.findall(r'[\d.\d]+', items[1])
+			X = float(X[0])
+			Y = float(Y[0])
 		
 	return X,Y
 
-def check_position(X,Y,Z,remote_connection, webcam, layerbreak, flag):
+def check_position(X,Y,Z,remote_connection, layerbreak):
 	count = 0
 	X = round(X,2)
 	Y = round(Y,2)
@@ -186,21 +188,24 @@ def check_position(X,Y,Z,remote_connection, webcam, layerbreak, flag):
 			xc = float(xc[0])
 			yc = float(yc[0])
 			zc = float(zc[0])
-			if (xc+0.01>=X or xc-0.01<=X) and (yc+0.01>=Y or yc-0.01<=Y) and (zc+0.01>=Z or zc-0.01<=Z):
+			x_compare = xc-0.01 <= X <= xc+0.01
+			y_compare = yc-0.01 <= Y <= yc+0.01
+			z_compare = zc-0.01 <= Z <= zc+0.01
+			if x_compare and y_compare and z_compare:
 				return 1
 	else:
 		return 0
 
-def capture_img(camera, frame, layerbreak):
+def capture_img(gfile_name, camera, frame, layerbreak):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
-	ts = calendar.timegm(time.gmtime())
-	imfile = "database/"+str(ts)+"_"+str(layerbreak)+'img.jpg'
+	ts = time.strftime("%Y%m%d%H%M")
+	imfile = "database/"+str(ts)+"_"+gfile_name+"_"+str(layerbreak)+'.jpg'
 	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
 
-def video_capture(webcam, layerbreak):
+def video_capture(gfile_name, webcam, layerbreak):
 	count = 1
 	t = True
 	while t:
@@ -210,8 +215,8 @@ def video_capture(webcam, layerbreak):
 			check, frame = webcam.read()
 			cv2.imshow("Capturing", frame)
 			key = cv2.waitKey(1)
-			if count == 500: 
-				capture_img(webcam, frame, layerbreak)
+			if count == 450: #100
+				capture_img(gfile_name, webcam, frame, layerbreak)
 				t = False
 				time.sleep(2)
 				break
@@ -234,7 +239,7 @@ def print_initial_lines(remote_connection):
 def adjust_extruder(remote_connection):
 	remote_connection.send("sendgcode G91\n")	## Set Relative Positioning
 	## Retract extruder
-	remote_connection.send("sendgcode G0 F8000 E-7\n")
+	remote_connection.send("sendgcode G0 F8000 E-9\n")
 	time.sleep(2)
 	remote_connection.send("sendgcode G90\n")	## Set Absolute Positioning
 
@@ -282,8 +287,9 @@ remote_connection.send("sendgcode G28 \n")
 out = remote_connection.recv(9999)
 print(out)
 ################  Get Times Btwn Layers  ##################
-print("\n\n\nn")
-gfile = "gcodeUM/UMS3_random13_12infill_square.gcode" #input("Gcode file: <file.gcode> \n")
+print("\n\n\n")
+gfile_name = "elbowhole"
+gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
 print(gfile+"\n")
 times_file = "times.txt"
 set_time_elapsed(gfile, times_file)
@@ -292,17 +298,18 @@ set_time_elapsed(gfile, times_file)
 extruder_temp, bed_temp = find_init_temperature(gfile)
 set_temperature(extruder_temp, bed_temp, remote_connection,1)
 
+#input("stop program")
 ################  Start Camera  ##################
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(0)
-webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)
-webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
-webcam.set(cv2.CAP_PROP_FPS, 15)
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
+#webcam.set(cv2.CAP_PROP_FPS, 15)
 
 ################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
 
-z_offset = str(4.21) #input("\nEnter height to zero bed: ")
+z_offset = str(4.22) #4.21input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
@@ -315,18 +322,16 @@ time.sleep(2)
 
 goal_X = 10
 goal_Z = Z+2
-fr_factor = 1.1 ## Feedrate adjustment factor
-alt_amount = 0.05 ## Extrusion adjustment amount
+fr_factor = 1.35 ## Feedrate adjustment factor
+alt_amount = -0.3875 ## Extrusion adjustment amount
+
 ################  Print Loop  ##################
 while True:
 	try:
 
 		line = gfile_print.readline()
-		check, frame = webcam.read()
-		cv2.imshow("Capturing", frame)
-		key = cv2.waitKey(1)
 
-		if not line: ### End of File ###
+		if not line or linecount==final_line:
 			
 			print("\nFinished printing. \n")
 			set_temperature(0, 0, remote_connection,0)
@@ -336,27 +341,29 @@ while True:
 			time.sleep(1)
 			remote_connection.send("sendgcode G28 Z\n")			
 			remote_connection.send("sendgcode G28 Z\n")
-
-			command = input("\nConfirm piece is removed from print bed by hitting 'enter'. \n")
-			remote_connection.send("sendgcode G28 Z\n")
-			ssh.close()
 			cv2.destroyAllWindows()
+			command = input("\nConfirm piece is removed from print bed by hitting 'enter'. \n")
+			ssh.close()
 			os.remove(times_file)
 			break
 
 		else: #### Print g-code ####
 			time.sleep(0.01)
-			print("Layer :"+str(layercount)+", Line Sent to Printer: "+str(linecount)+" out of "+str(layerbreak))
+			print("Layer: "+str(layercount)+", Line "+str(linecount)+" of "+str(layerbreak))
 
 			# Change feedrate by factor of fr_factor
-			if layercount > 2:
+			if layercount > 3:
 				line = adjust_feedrate_amount(line,fr_factor)
-				print(line)
 
-			# Change extrusion amount by alt_amount
-			if layercount >11:
+			# Change extrusion by amount alt_amount
+			if layercount > 6:
 				line = adjust_feedrate_amount(line,alt_amount)
-			
+				
+			# Change temperature by amount alt_temp
+			#if layercount == 7:
+			#	extruder_temp = extruder_temp + alt_temp
+			#	set_temperature(extruder_temp, bed_temp, remote_connection,2)
+
 			# Send gcode to UMS3
 			remote_connection.send("sendgcode "+line+"\n")
 
@@ -369,10 +376,6 @@ while True:
 				print("\n\n")
 				starttime = time.time()
 
-			#if linecount == 40: #### Zero Bed Offset ####
-				#input("\n\ncheck")
-
-
 			if linecount == layerbreak-1:		
 				X_line,Y_line = get_XY(line)
 				if X_line > 0 and Y_line > 0:
@@ -381,44 +384,46 @@ while True:
 
 			if linecount == layerbreak:
 				
-				print("\n\nLayer: "+str(linecount) +" , Breakpoints"+str(layercount)+"\n\n")
-				## Attempting to create defect -- increase temperature
-				#if layercount == 7:
-				#	extruder_temp=extruder_temp+5
-				#	set_temperature(extruder_temp, bed_temp, remote_connection,2)
+				print("\n\nLayer: "+str(linecount)+" , Breakpoints"+str(layercount)+"\n\n")
 
-				if layercount % 3 == 2:
+				if layercount % 2 == 1:
 ####
 					## Retract extruder
-					set_temperature(extruder_temp-45, bed_temp, remote_connection,2)
+					set_temperature(extruder_temp-100, bed_temp, remote_connection,2)
 					adjust_extruder(remote_connection)
 					## Position for camera capture
-					goal_Z = Z+1
-					goal_Y = 125+(linecount%2)/10
+					goal_Z = Z+0.1
+					goal_Y = 130+(linecount%2)/10
 					out = remote_connection.recv(9999)
 					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
 					remote_connection.send("sendgcode G0 Z"+str(goal_Z)+"\n")
 					
 					## Sleep for estimated time for layer
-					i = 0
 					endtime = time.time()
-					timediff = 1*(endtime-starttime)*fr_factor
+					timediff = (endtime-starttime)
+					time.sleep(int(abs(timepause)))
+					i = 0
 					for t in range(10000000):
 						if t % 2 == 1:
 							print("*",end="",flush=True)
-						i = check_position(0,150,goal_Z,remote_connection, webcam, layerbreak,0)
+						i = check_position(0,150,goal_Z,remote_connection, layerbreak)
 						if i == 1:
-							print("G0 X0 Y150 Goal_Z")
+							print("|",end="",flush=True)
 							break
-						time.sleep(1) #0.60
-
+						time.sleep(.85)
+						
 					remote_connection.send("sendgcode G0 F5000 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z)+"\n")
-					## Check if in position for image capture, then capture image
-					i = 0
-					while i == 0:
-						i = check_position(goal_X,goal_Y,goal_Z,remote_connection, webcam, layerbreak,1)
+					
+					i = 0		
+					for t in range(10000000):
+						if t % 2 == 1:
+							print("-",end="",flush=True)
+						i = check_position(goal_X,goal_Y,goal_Z,remote_connection, layerbreak)
 						if i == 1:
-							video_capture(webcam, layerbreak)
+							video_capture(gfile_name, webcam, layercount)
+							break
+						time.sleep(2)
+						
 					## Position to resume printing
 					set_temperature(extruder_temp, bed_temp, remote_connection,2)
 					gpositionXY = "X"+str(X)+" Y"+str(Y)
@@ -441,6 +446,7 @@ while True:
 	#### Escape/Close Program ####
 	except(KeyboardInterrupt):
 		print("\nExit program.\n")
+		remote_connection.send("sendgcode G28 Z\n")
 		set_temperature(0, 0, remote_connection,0)
 		time.sleep(1)
 		remote_connection.send("sendgcode G0 F5500 X0 Y150\n")
