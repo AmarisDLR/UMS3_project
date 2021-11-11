@@ -1,5 +1,10 @@
-## This program will take images at evenly spaced breakpoints. Using modulus (%) to
-## specify the spacing of the breakpoints.
+### This program will take images at evenly spaced breakpoints. Using modulus (%) to
+### specify the spacing of the breakpoints.
+### This program is geared to the UMS3, which does not use serial communition. Instead
+### SSH communication is used to pass on g-code. The g-code file used for the bases of 
+### this code is uses g-code flavor Grifffin and does not place the origin at center.
+### Using Ultimaker Cura, the origin is placed in the lower left corner of the printer
+### bed (default origin).
 
 import os
 import time
@@ -8,8 +13,8 @@ import paramiko
 import cv2
 
 def find_init_temperature(gfile):
-# First, find the initial temperature
-# M109 and M104 do not work in SSH griffin
+### First, find the initial temperature
+### M109 and M104 do not work in SSH griffin
 	extruder_temp = 0
 	bed_temp = 0
 	with open(gfile) as gcode:
@@ -59,7 +64,7 @@ def check_temperature(extruder_temp, bed_temp,remote_connection):
 		remote_connection.send("get current_temperature \n")
 		time.sleep(1.5)
 		out = str(remote_connection.recv(9999))
-		current_bed_temp = re.findall(r'[\d.\d]+', out) # current bed temperature
+		current_bed_temp = re.findall(r'[\d.\d]+', out) ### current bed temperature
 		if current_bed_temp:
 			current_bed_temp = float(current_bed_temp[0])
 
@@ -68,7 +73,7 @@ def check_temperature(extruder_temp, bed_temp,remote_connection):
 		remote_connection.send("get current_temperature \n")
 		time.sleep(1.5)
 		out = str(remote_connection.recv(9999))
-		current_ex_temp = re.findall(r'[\d.\d]+', out) # current extruder temperature
+		current_ex_temp = re.findall(r'[\d.\d]+', out) ### current extruder temperature
 		if current_ex_temp:
 			current_ex_temp = float(current_ex_temp[0])
 			if count%2 == 0:		
@@ -78,9 +83,9 @@ def check_temperature(extruder_temp, bed_temp,remote_connection):
 				#print("\nCurrent extruder temperature "+str(current_ex_temp)+"\n")			
 				t = 0
 				break
-		if  count > 600:
+		'''if  count > 600:
 			t = 0
-			break
+			break'''
 
 def zero_bed(gfile, offset, remote_connection): 
 	with open(gfile) as gcode:
@@ -130,7 +135,7 @@ def set_time_elapsed(gfile, times_file):
 
 def get_time_elapsed(times_file):
 	line = times_file.readline()
-	if not line: ### End of File ###
+	if not line: ### if 'End of File' ###
 		return -1,-1,-1
 		
 	items = line.split(",")
@@ -164,10 +169,9 @@ def get_XY(line):
 			Y = re.findall(r'[\d.\d]+', items[1])
 			X = float(X[0])
 			Y = float(Y[0])
-		
 	return X,Y
 
-def check_position(X,Y,Z,remote_connection, layerbreak):
+def check_position(X,Y,Z,remote_connection,layerbreak):
 	count = 0
 	X = round(X,2)
 	Y = round(Y,2)
@@ -215,7 +219,8 @@ def video_capture(gfile_name, webcam, layerbreak):
 			check, frame = webcam.read()
 			cv2.imshow("Capturing", frame)
 			key = cv2.waitKey(1)
-			if count == 450: #100
+			if count == 450: ### Give time for camera with autofocus to focus
+					 ### & allow time for user to view overhead video
 				capture_img(gfile_name, webcam, frame, layerbreak)
 				t = False
 				time.sleep(2)
@@ -224,7 +229,7 @@ def video_capture(gfile_name, webcam, layerbreak):
 			cv2.destroyAllWindows()
 			break
 
-def print_initial_lines(remote_connection):
+def print_initial_lines(remote_connection): ### Purge line ###
 	remote_connection.send("sendgcode G0 F600 X0 Z0.24\n")
 	remote_connection.send("sendgcode G0 E11\n")
 	time.sleep(3)
@@ -233,15 +238,14 @@ def print_initial_lines(remote_connection):
 	remote_connection.send("sendgcode G0 F1050 Y180\n")
 	remote_connection.send("sendgcode G0 Y50 E1\n")
 	remote_connection.send("sendgcode G0 F3000 X5 \n")
-	remote_connection.send("sendgcode G0 Y100 E-5 \n")# #-(5-6.5)
-	#remote_connection.send("sendgcode G92 E0\n")
+	remote_connection.send("sendgcode G0 Y100 E-5 \n")
 
-def adjust_extruder(remote_connection):
-	remote_connection.send("sendgcode G91\n")	## Set Relative Positioning
-	## Retract extruder
-	remote_connection.send("sendgcode G0 F8000 E-9\n")
+def adjust_extruder(remote_connection, amount):
+	remote_connection.send("sendgcode G91\n")	### Set Relative Positioning
+	### Retract extruder
+	remote_connection.send("sendgcode G0 F8000 E"+str(amount)+"\n")
 	time.sleep(2)
-	remote_connection.send("sendgcode G90\n")	## Set Absolute Positioning
+	remote_connection.send("sendgcode G90\n")	### Set Absolute Positioning
 
 def adjust_extrusion_amount(line,alt_amount):
 	Ennn = line.split('E')
@@ -270,15 +274,13 @@ ip_address = "10.1.10.203"
 username = "ultimaker"
 password = "ultimaker"
 ssh = paramiko.SSHClient()
-# Load SSH host keys.
+### Load SSH host keys.
 ssh.load_system_host_keys()
-
-# Add SSH host key when missing.
+### Add SSH host key when missing.
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 ssh.connect(ip_address, username=username, password=password, look_for_keys=False, port=22)
 remote_connection = ssh.invoke_shell()
-
-# send out command to begin shell program
+### send out command to begin shell program
 remote_connection.send("\n")
 out = remote_connection.recv(9999)
 print(out)
@@ -286,9 +288,10 @@ remote_connection.send("sendgcode G92 E0\n")
 remote_connection.send("sendgcode G28 \n")
 out = remote_connection.recv(9999)
 print(out)
+
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "elbowhole"
+gfile_name = "UMS3_random38_100infill"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
 print(gfile+"\n")
 times_file = "times.txt"
@@ -298,7 +301,6 @@ set_time_elapsed(gfile, times_file)
 extruder_temp, bed_temp = find_init_temperature(gfile)
 set_temperature(extruder_temp, bed_temp, remote_connection,1)
 
-#input("stop program")
 ################  Start Camera  ##################
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(0)
@@ -309,7 +311,7 @@ webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
 ################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
 
-z_offset = str(4.22) #4.21input("\nEnter height to zero bed: ")
+z_offset = str(4.22) # z_offset = input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
@@ -322,18 +324,19 @@ time.sleep(2)
 
 goal_X = 10
 goal_Z = Z+2
-fr_factor = 1.35 ## Feedrate adjustment factor
-alt_amount = -0.3875 ## Extrusion adjustment amount
+
+fr_factor = 1.15 ### Feedrate adjustment factor
+alt_amount = -0.4 ### Extrusion adjustment amount
+alt_temp = 0 ### Temperate adjustment amount
 
 ################  Print Loop  ##################
 while True:
 	try:
-
 		line = gfile_print.readline()
 
 		if not line or linecount==final_line:
 			
-			print("\nFinished printing. \n")
+			print("\nFinished printing. \n")  ### End of g-code file ### 
 			set_temperature(0, 0, remote_connection,0)
 			time.sleep(1)
 			remote_connection.send("sendgcode G0 F5500 X0 Y150\n")
@@ -351,20 +354,20 @@ while True:
 			time.sleep(0.01)
 			print("Layer: "+str(layercount)+", Line "+str(linecount)+" of "+str(layerbreak))
 
-			# Change feedrate by factor of fr_factor
+			### Change feedrate by factor of fr_factor
 			if layercount > 3:
 				line = adjust_feedrate_amount(line,fr_factor)
 
-			# Change extrusion by amount alt_amount
+			### Change extrusion by amount alt_amount
 			if layercount > 6:
 				line = adjust_feedrate_amount(line,alt_amount)
 				
-			# Change temperature by amount alt_temp
-			#if layercount == 7:
-			#	extruder_temp = extruder_temp + alt_temp
-			#	set_temperature(extruder_temp, bed_temp, remote_connection,2)
+			### Change temperature by amount alt_temp
+			if layercount == 7:
+				extruder_temp = extruder_temp + alt_temp
+				set_temperature(extruder_temp, bed_temp, remote_connection,2)
 
-			# Send gcode to UMS3
+			### Send gcode to UMS3 printer
 			remote_connection.send("sendgcode "+line+"\n")
 
 			if linecount == 33: #### Zero Bed Offset ####
@@ -376,29 +379,27 @@ while True:
 				print("\n\n")
 				starttime = time.time()
 
-			if linecount == layerbreak-1:		
+			if linecount == layerbreak-1:	### Get final X and Y positions of layer	
 				X_line,Y_line = get_XY(line)
 				if X_line > 0 and Y_line > 0:
 					X = X_line
 					Y = Y_line
 
 			if linecount == layerbreak:
-				
 				print("\n\nLayer: "+str(linecount)+" , Breakpoints"+str(layercount)+"\n\n")
 
 				if layercount % 2 == 1:
-####
-					## Retract extruder
-					set_temperature(extruder_temp-100, bed_temp, remote_connection,2)
-					adjust_extruder(remote_connection)
-					## Position for camera capture
+					### Retract extruder
+					set_temperature(extruder_temp-150, bed_temp, remote_connection,2)
+					adjust_extruder(remote_connection, 20) ## amount to extrude in mm
+					### Position for camera capture
 					goal_Z = Z+0.1
 					goal_Y = 130+(linecount%2)/10
 					out = remote_connection.recv(9999)
 					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
 					remote_connection.send("sendgcode G0 Z"+str(goal_Z)+"\n")
 					
-					## Sleep for estimated time for layer
+					### Sleep for estimated time for layer
 					endtime = time.time()
 					timediff = (endtime-starttime)
 					time.sleep(int(abs(timepause)))
@@ -412,7 +413,8 @@ while True:
 							break
 						time.sleep(.85)
 						
-					remote_connection.send("sendgcode G0 F5000 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z)+"\n")
+					remote_connection.send("sendgcode G0 F5000 X"+str(goal_X)+\
+						" Y"+str(goal_Y)+" Z"+str(goal_Z)+"\n")
 					
 					i = 0		
 					for t in range(10000000):
@@ -424,18 +426,18 @@ while True:
 							break
 						time.sleep(2)
 						
-					## Position to resume printing
+					### Position to resume printing
 					set_temperature(extruder_temp, bed_temp, remote_connection,2)
 					gpositionXY = "X"+str(X)+" Y"+str(Y)
 					gpositionZ = "Z"+str(Z)
-					## Return to last position
+					### Return to last XYZ position
 					remote_connection.send("sendgcode G0 "+gpositionZ+"\n")	
 					remote_connection.send("sendgcode G0 "+gpositionXY+"\n")	
 					time.sleep(2)
 					timepause = 0
 					starttime = time.time()
-#####
-				## Update layerbreak and time_break
+
+				### Update layerbreak and time_break
 				elapsed_time, layerbreak, Z = get_time_elapsed(times)
 				timepause += elapsed_time	
 				layercount += 1
@@ -443,7 +445,7 @@ while True:
 			linecount += 1
 
 
-	#### Escape/Close Program ####
+	### Escape/Close program manually using ctrl+c ####
 	except(KeyboardInterrupt):
 		print("\nExit program.\n")
 		remote_connection.send("sendgcode G28 Z\n")
