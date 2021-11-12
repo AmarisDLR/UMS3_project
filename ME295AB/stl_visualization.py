@@ -76,29 +76,45 @@ def show(plane):
 	return P
 
 #################
-#70mm_low_poly_fox_MatterControl
-#elbowhole
 
-def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER): 
+def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUMBER): 
 	### Printing Bed Definition
 
 	x_max_bed = 120 # mm
 	y_max_bed = 90 # mm
 	z_max_bed = 50 # mm
-	img_size = 500 # 800x800 pixels
-	img_size_x = 1600#
-	img_size_y = 1200#
+	img_size = img_size_y # 500 pixels
+
 	#################
 
 	layer_height = 0.1
 	z_height = layer_height*LAYER_NUMBER
 	print("z-height = {} mm".format(z_height))
 
+	### Intrinsic Camera Parameters
+
+	fx = 1000.0
+	fy = 1000.0
+	cx = 0
+	cy = 0
+
+	cam_mtx = np.array([[fx,        0,     cx], [0,         fy,    cy], [0,         0,     1]])
+
+	#################
+
+	### Intrinsic camera parameters (obtained on the calibration stage)
+	### Source images have already been undistorted
+
+	camera_intrinsic_K = np.array(
+				[[1552.3, 0,      650.1],
+				[0,       1564.8, 486.2],
+				[0,       0,      1]], dtype = "float")
+
 	#################
 		
 	verts1, faces1 = load_stl(stl_file)
 	mesh1 = mesh.Mesh.from_file(stl_file)
-
+	
 	volume1, cog1, inertia1 = mesh1.get_mass_properties()
 	print("Volume                                  = {0}".format(volume1))
 	print("Position of the center of gravity (COG) = {0}".format(cog1))
@@ -190,12 +206,6 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	cy = 0
 
 	cam_mtx = np.array([[fx,        0,     cx], [0,         fy,    cy], [0,         0,     1]])
-
-	#################
-
-	### Intrinsic camera parameters (obtained on the calibration stage)
-	### Source images have already been undistorted
-
 	camera_intrinsic_K = np.array(
 				[[1552.3, 0,      650.1],
 				[0,       1564.8, 486.2],
@@ -228,12 +238,13 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	C[0:3,3] = t.T
 	C[3,3] = 1
 
+	print("C:\n{}".format(C))
 	#################
 
 	### Viewing Frustum V
 
 	aspect = 1.0
-	alpha = 2.0
+	alpha = 45.0
 	far = 80.0
 	near = 8.0
 
@@ -266,31 +277,12 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 
 	### Watching Distance
 
-	watch_dist_abs = 20.0
-	watch_dist_coord = np.sqrt(watch_dist_abs)/3
-	watch = np.array([cog1[0],cog1[1], cam_main[3][2]+watch_dist_coord,1])
+	watch = np.array([cog1[0],cog1[1],cam_main[3][2],1])
 	print('Watching point = {}'.format(watch))
 
 	#################
 
 	zoom = 5 # picture scale
-
-	# find the FOV plane
-	distance = [watch[0]-cam_main[0][0],watch[1]-cam_main[0][1],watch[2]-cam_main[0][2]]
-	norm = np.sqrt(distance[0]**2+distance[1]**2+distance[2]**2)
-	direction = [distance[0]/norm,distance[1]/norm,distance[2]/norm]
-	bullet_vector = [direction[0]*np.sqrt(2),direction[1]*np.sqrt(2),direction[2]*np.sqrt(2)]
-
-	# a plane is a*x+b*y+c*z+d=0
-	# [a,b,c] is the normal. Thus, we have to calculated and we're set d = -point.dot(normal)
-	d = -watch[0:3].dot(bullet_vector)
-
-	# draw the FOV plane
-	# create x,y
-	xx, yy = np.meshgrid(range(int(watch[0]-zoom*sensor_width/2),int(watch[0]+zoom*sensor_width/2)),\
-		             range(int(watch[1]-zoom*sensor_height/2),int(watch[1]+zoom*sensor_height/2)))
-	# calculate corresponding z
-	zz = (-bullet_vector[0]*xx-bullet_vector[1]*yy-d)*1.0/bullet_vector[2]
 
 	#################
 
@@ -304,25 +296,16 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	#------------------------------------------------- Transformed Cam Position
 	for i in range(np.shape(cam_main_tr)[0]):
 		cam_main_tr[i] = np.dot(C, cam_main[i])
-
 	#------------------------------------------------- Transformed Watching Distance
 	watch_tr = np.dot(C, watch)
-
 	#------------------------------------------------- Watching Distance (vectors and plane)
-	distance_tr = [watch_tr[0]-cam_main_tr[0][0],watch_tr[1]-cam_main_tr[0][1],watch_tr[2]-cam_main_tr[0][2]]
-	norm_tr = np.sqrt(distance_tr[0]**2+distance_tr[1]**2+distance_tr[2]**2)
-	direction_tr = [distance_tr[0]/norm_tr,distance_tr[1]/norm_tr,distance_tr[2]/norm_tr]
-	bullet_vector_tr = [direction_tr[0]*np.sqrt(2),direction_tr[1]*np.sqrt(2),direction_tr[2]*np.sqrt(2)]
-
-	d_tr = -watch_tr[0:3].dot(bullet_vector_tr)
 
 	# create x,y
 	xx_tr, yy_tr = np.meshgrid(range(int(watch_tr[0]-zoom*sensor_width/2),int(watch_tr[0]+zoom*sensor_width/2)),\
 			range(int(watch_tr[1]-zoom*sensor_height/2),int(watch_tr[1]+zoom*sensor_height/2)))
-
-	# calculate corresponding z
-	zz_tr = (-bullet_vector_tr[0]*xx_tr-bullet_vector_tr[1]*yy_tr-d_tr)*1./bullet_vector_tr[2]
-
+	# corresponding z
+	mesh_dim = np.shape(xx_tr)
+	zz_tr = cam_main_tr[3][2]*np.ones([mesh_dim[0],mesh_dim[1]])
 	#################
 
 	### Cubic printing zone
@@ -357,21 +340,17 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	ax = Axes3D(fig)
 
 	# -------------------------------- Printing Bed
-	ax.plot_surface(xx_base,yy_base,zz_base, color='slategray', alpha=0.3)
 	ax.add_collection3d(faces)
-	ax.scatter(points[:,0], points[:,1], points[:,2],c='slategray',s=20)
+	ax.plot_surface(xx_base,yy_base,zz_base, color='slategray', alpha=0.3)
+	#ax.scatter(points[:,0], points[:,1], points[:,2],c='slategray',s=20)
 	# -------------------------------- End Printing Bed
 
 	# -------------------------------- Origin (EXTENSION LINES)
 	ax.scatter3D(x,y,z,color='black',s=50)
-
-	ax.plot([0,x_max_bed],[y*y_max_bed/img_size,y*y_max_bed/img_size],\
-	[z*z_max_bed/img_size,z*z_max_bed/img_size],color = 'r')
-	ax.plot([x*x_max_bed/img_size,x*x_max_bed/img_size],[0,y_max_bed],\
-	[z*z_max_bed/img_size,z*z_max_bed/img_size],color = 'g')
-	ax.plot([x*x_max_bed/img_size,x*x_max_bed/img_size],\
-	[y*y_max_bed/img_size,y*y_max_bed/img_size],[0,z_max_bed],color = 'b')
-	# --------------------------------End Origin☺
+	ax.plot([x,60],[y,y],[z,z],color = 'r')
+	ax.plot([x,x],[0,-60],[0,0],color = 'g')
+	ax.plot([x,x],[y,y],[0,z_max_bed],color = 'b')
+	# --------------------------------End Origin
 
 	#------------------------------------------------- Transformed Camera
 	ax.scatter(cam_main_tr[0][0],cam_main_tr[0][1],cam_main_tr[0][2],c='r',s=50) # origin
@@ -386,43 +365,42 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	ax.text(cam_main_tr[2][0],cam_main_tr[2][1],cam_main_tr[2][2],s='y2',fontsize=10)
 
 	ax.scatter(cam_main_tr[3][0],cam_main_tr[3][1],cam_main_tr[3][2],c='b') # z2
+
 	ax.plot([cam_main_tr[0][0],cam_main_tr[3][0]],[cam_main_tr[0][1],cam_main_tr[3][1]],\
 		[cam_main_tr[0][2],cam_main_tr[3][2]],c='b')
 	ax.text(cam_main_tr[3][0],cam_main_tr[3][1],cam_main_tr[3][2],s='z2',fontsize=10)
 
 	ax.plot([cam_main_tr[0][0],watch_tr[0]],[cam_main_tr[0][1],watch_tr[1]],[cam_main_tr[0][2],watch_tr[2]],':',c='lightcoral')
+
 	#------------------------------------------------- End Transformed Camera
 
 	#------------------------------------------------- Transformed Watching distance (PLANE)
-	ax.scatter(watch_tr[0],watch_tr[1],watch_tr[2],marker='o',color='lightcoral',s=20)
-	ax.plot_surface(xx_tr,yy_tr,zz_tr,color='lightcoral', alpha=0.4)
+	ax.scatter(watch_tr[0],watch_tr[1],watch_tr[2],marker='o',color='cyan',s=20) ## point
+	ax.plot_surface(xx_tr,yy_tr,zz_tr,color='cyan', alpha=0.4) ## plane
 	#------------------------------------------------- End Transformed Watching distance (PLANE)
 
 	#------------------------------------------------- Transformed Frame (OUTLINE)
-	ax.scatter(xx_tr[0][0],yy_tr[0][0],zz_tr[0][0],color='lightcoral',s=50)
-	ax.scatter(xx_tr[-1][0],yy_tr[-1][0],zz_tr[-1][0],color='lightcoral',s=50)
-	ax.scatter(xx_tr[-1][-1],yy_tr[-1][-1],zz_tr[-1][-1],color='lightcoral',s=50)
-	ax.scatter(xx_tr[0][-1],yy_tr[0][-1],zz_tr[0][-1],color='lightcoral',s=50)
+	ax.scatter(xx_tr[0][0],yy_tr[0][0],zz_tr[0][0],color='tomato',s=50)
+	ax.scatter(xx_tr[-1][0],yy_tr[-1][0],zz_tr[-1][0],color='tomato',s=50)
+	ax.scatter(xx_tr[-1][-1],yy_tr[-1][-1],zz_tr[-1][-1],color='tomato',s=50)
+	ax.scatter(xx_tr[0][-1],yy_tr[0][-1],zz_tr[0][-1],color='tomato',s=50)
 
-	ax.plot([xx_tr[0][0],xx_tr[-1][0]],[yy_tr[0][0],yy_tr[-1][0]],[zz_tr[0][0],zz_tr[-1][0]],c='lightcoral')
-	ax.plot([xx_tr[-1][0],xx_tr[-1][-1]],[yy_tr[-1][0],yy_tr[-1][-1]],[zz_tr[-1][0],zz_tr[-1][-1]],c='lightcoral')
-	ax.plot([xx_tr[0][-1],xx_tr[-1][-1]],[yy_tr[0][-1],yy_tr[-1][-1]],[zz_tr[0][-1],zz_tr[-1][-1]],c='lightcoral')
-	ax.plot([xx_tr[0][-1],xx_tr[0][0]],[yy_tr[0][-1],yy_tr[0][0]],[zz_tr[0][-1],zz_tr[0][0]],c='lightcoral')
+	ax.plot([xx_tr[0][0],xx_tr[-1][0]],[yy_tr[0][0],yy_tr[-1][0]],[zz_tr[0][0],zz_tr[-1][0]],c='tomato')
+	ax.plot([xx_tr[-1][0],xx_tr[-1][-1]],[yy_tr[-1][0],yy_tr[-1][-1]],[zz_tr[-1][0],zz_tr[-1][-1]],c='tomato')
+	ax.plot([xx_tr[0][-1],xx_tr[-1][-1]],[yy_tr[0][-1],yy_tr[-1][-1]],[zz_tr[0][-1],zz_tr[-1][-1]],c='tomato')
+	ax.plot([xx_tr[0][-1],xx_tr[0][0]],[yy_tr[0][-1],yy_tr[0][0]],[zz_tr[0][-1],zz_tr[0][0]],c='tomato')
 
-	ax.plot([cam_main_tr[0][0],xx_tr[-1][0]],[cam_main_tr[0][1],yy_tr[-1][0]],[cam_main_tr[0][2],zz_tr[-1][0]],c='lightcoral')
-	ax.plot([cam_main_tr[0][0],xx_tr[0][-1]],[cam_main_tr[0][1],yy_tr[0][-1]],[cam_main_tr[0][2],zz_tr[0][-1]],c='lightcoral')
-	ax.plot([cam_main_tr[0][0],xx_tr[-1][-1]],[cam_main_tr[0][1],yy_tr[-1][-1]],[cam_main_tr[0][2],zz_tr[-1][-1]],c='lightcoral')
-	ax.plot([cam_main_tr[0][0],xx_tr[0][0]],[cam_main_tr[0][1],yy_tr[0][0]],[cam_main_tr[0][2],zz_tr[0][0]],c='lightcoral')
+	ax.plot([cam_main_tr[0][0],xx_tr[-1][0]],[cam_main_tr[0][1],yy_tr[-1][0]],[cam_main_tr[0][2],zz_tr[-1][0]],c='tomato')
+	ax.plot([cam_main_tr[0][0],xx_tr[0][-1]],[cam_main_tr[0][1],yy_tr[0][-1]],[cam_main_tr[0][2],zz_tr[0][-1]],c='tomato')
+	ax.plot([cam_main_tr[0][0],xx_tr[-1][-1]],[cam_main_tr[0][1],yy_tr[-1][-1]],[cam_main_tr[0][2],zz_tr[-1][-1]],c='tomato')
+	ax.plot([cam_main_tr[0][0],xx_tr[0][0]],[cam_main_tr[0][1],yy_tr[0][0]],[cam_main_tr[0][2],zz_tr[0][0]],c='tomato')
 	#------------------------------------------------- End Transformed Frame (OUTLINE)
 
 	# -------------------------------- Slice
 	for i in range(np.shape(h_plane_1)[0]):
 		ax.scatter(h_plane_1[i][0],h_plane_1[i][1],h_plane_1[i][2],c='maroon',marker='o',s=20)
 		ax.plot([h_plane_1[i][0],h_plane_1[i-1][0]],[h_plane_1[i][1],h_plane_1[i-1][1]],\
-			[h_plane_1[i][2],h_plane_1[i-1][2]],color='maroon',linewidth=2)
-
-	for i in range(np.shape(visual_markers)[0]):
-		ax.scatter(visual_markers[i][0],visual_markers[i][1],visual_markers[i][2],c='k',marker='o',s=50)        
+			[h_plane_1[i][2],h_plane_1[i-1][2]],color='maroon',linewidth=2)     
 	# -------------------------------- End Slice
 
 	# ------------------------------------------------------ Add stl
@@ -452,26 +430,6 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 			color='royalblue',linewidth=7)
 	# ------------------------------------------------------ End Add stl
 
-	# ------------------------------------------------------ Tracing (Axes)
-	ax.plot([cam_main_tr[0][0],h_plane_1[0][0]],[cam_main_tr[0][1],h_plane_1[0][1]],\
-		[cam_main_tr[0][2],h_plane_1[0][2]],color='pink')
-	ax.plot([cam_main_tr[0][0],h_plane_1[1][0]],[cam_main_tr[0][1],h_plane_1[1][1]],\
-		[cam_main_tr[0][2],h_plane_1[1][2]],color='pink')
-	ax.plot([cam_main_tr[0][0],h_plane_1[2][0]],[cam_main_tr[0][1],h_plane_1[2][1]],\
-		[cam_main_tr[0][2],h_plane_1[2][2]],color='pink')
-	ax.plot([cam_main_tr[0][0],h_plane_1[3][0]],[cam_main_tr[0][1],h_plane_1[3][1]],\
-		[cam_main_tr[0][2],h_plane_1[3][2]],color='pink')
-
-	ax.plot([cam_main_tr[0][0],visual_markers[0][0]],[cam_main_tr[0][1],visual_markers[0][1]],\
-		[cam_main_tr[0][2],visual_markers[0][2]],color='silver')
-	ax.plot([cam_main_tr[0][0],visual_markers[1][0]],[cam_main_tr[0][1],visual_markers[1][1]],\
-		[cam_main_tr[0][2],visual_markers[1][2]],color='silver')
-	ax.plot([cam_main_tr[0][0],visual_markers[2][0]],[cam_main_tr[0][1],visual_markers[2][1]],\
-		[cam_main_tr[0][2],visual_markers[2][2]],color='silver')
-	ax.plot([cam_main_tr[0][0],visual_markers[3][0]],[cam_main_tr[0][1],visual_markers[3][1]],\
-		[cam_main_tr[0][2],visual_markers[3][2]],color='silver')
-	# ------------------------------------------------------ End Tracing
-
 	ax.set_xlabel('X, mm')
 	ax.set_ylabel('Y, mm')
 	ax.set_zlabel('Z, mm')
@@ -487,74 +445,45 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	# ------------------------------------------------------
 	#################
 
-	# STL slice with additional dimension
-	# Shape P1[0]
-	Pc_0 = np.concatenate((P0[0], np.ones((np.shape(P0[0])[0],1), dtype=int)), axis=1)
-	Pc_1 = np.concatenate((P1[0], np.ones((np.shape(P1[0])[0],1), dtype=int)), axis=1)
+	# STL slice 
 
-	Pc_0_main = np.zeros((np.shape(P0[0])[0],4), dtype=float)
-	Pc_1_main = np.zeros((np.shape(P1[0])[0],4), dtype=float)
+	fig = plt.figure(figsize=(18,18*img_size_y/img_size_x), dpi=80)
 
 
-	for i in range(np.shape(Pc_0)[0]):
-		Pc_0_main[i] = np.dot(np.dot(la.inv(C),Pc_0[i]),V)
-		Pc_0_main[i][0]=Pc_0_main[i][0]/Pc_0_main[i][3]
-		Pc_0_main[i][1]=Pc_0_main[i][1]/Pc_0_main[i][3]
-		Pc_0_main[i][2]=Pc_0_main[i][2]/Pc_0_main[i][3]
-	    
-	for i in range(np.shape(Pc_1)[0]):
-		Pc_1_main[i] = np.dot(np.dot(la.inv(C),Pc_1[i]),V)
-		Pc_1_main[i][0]=Pc_1_main[i][0]/Pc_1_main[i][3]
-		Pc_1_main[i][1]=Pc_1_main[i][1]/Pc_1_main[i][3]
-		Pc_1_main[i][2]=Pc_1_main[i][2]/Pc_1_main[i][3]
-
-
-	Pc_0_pic = np.zeros((np.shape(P0[0])[0],3), dtype=float)
-	Pc_1_pic = np.zeros((np.shape(P1[0])[0],3), dtype=float)
-	    
-	for i in range(np.shape(Pc_0_pic)[0]):
-		Pc_0_pic[i] = np.dot(cam_mtx,Pc_0_main[i,0:3])
-		Pc_0_pic[i][0]=Pc_0_pic[i][0]/Pc_0_pic[i][2]
-		Pc_0_pic[i][1]=Pc_0_pic[i][1]/Pc_0_pic[i][2]
-	    
-	for i in range(np.shape(Pc_1_pic)[0]):
-		Pc_1_pic[i] = np.dot(cam_mtx,Pc_1_main[i,0:3])
-		Pc_1_pic[i][0]=Pc_1_pic[i][0]/Pc_1_pic[i][2]
-		Pc_1_pic[i][1]=Pc_1_pic[i][1]/Pc_1_pic[i][2]
-
-	fig = plt.figure(figsize=(16,6), dpi=80)
-
-	ax = fig.add_subplot(121)
-	#--------------------------- P0[0]
-	for i in range(np.shape(P0[0])[0]):
-		ax.scatter(Pc_0_pic[i][0],Pc_0_pic[i][1], label='shape 0', color='b')
-		ax.plot([Pc_0_pic[i][0],Pc_0_pic[i-1][0]],[Pc_0_pic[i][1],Pc_0_pic[i-1][1]],color='b')
-	#--------------------------- P1[0]
 	for i in range(np.shape(P1[0])[0]):
-		ax.scatter(Pc_1_pic[i][0],Pc_1_pic[i][1], label='shape 1', color='r')
-		ax.plot([Pc_1_pic[i][0],Pc_1_pic[i-1][0]],[Pc_1_pic[i][1],Pc_1_pic[i-1][1]],color='r')
-	ax.set_xlabel('U, px')
-	ax.set_ylabel('V, px')
-	#ax.grid(False)
-	#ax.set_xlim(-100,100)
-	#ax.set_ylim(-800,-300)
-	ax.set_aspect(1)
-	ax.set_title('2D Projection')
-
-	ax = fig.add_subplot(122)
-	for i in range(np.shape(P1[0])[0]):
-		ax.scatter(P1[0][i][0],P1[0][i][1],color='red',s=20)
-		ax.plot([P1[0][i][0],P1[0][i-1][0]],[P1[0][i][1],P1[0][i-1][1]],color='red',linewidth=2)
+		plt.scatter(P1[0][i][0],P1[0][i][1],color='red',s=20)
+		plt.plot([P1[0][i][0],P1[0][i-1][0]],[P1[0][i][1],P1[0][i-1][1]],color='red',linewidth=2)
 	for i in range(np.shape(P0[0])[0]):
-		ax.scatter(P0[0][i][0],P0[0][i][1],color='blue',s=20)
-		ax.plot([P0[0][i][0],P0[0][i-1][0]],[P0[0][i][1],P0[0][i-1][1]],color='blue',linewidth=2)
-	ax.set_xlabel('X, mm')
-	ax.set_ylabel('Y, mm')
-	ax.set_aspect(1)
-	ax.set_title('Top view from STL')
+		plt.scatter(P0[0][i][0],P0[0][i][1],color='blue',s=20)
+		plt.plot([P0[0][i][0],P0[0][i-1][0]],[P0[0][i][1],P0[0][i-1][1]],color='blue',linewidth=2)
+	plt.xlabel('X, mm')
+	plt.ylabel('Y, mm')
+	plt.title('Top view from STL')
 	plt.savefig('Topview.jpg')
+	
 
-	#######**********
+def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUMBER):
+
+	### Intrinsic Camera Parameters
+
+	fx = 1000.0
+	fy = 1000.0
+	cx = 0
+	cy = 0
+
+	cam_mtx = np.array([[fx,        0,     cx], [0,         fy,    cy], [0,         0,     1]])
+
+	#################
+
+	### Intrinsic camera parameters (obtained on the calibration stage)
+	### Source images have already been undistorted
+
+	camera_intrinsic_K = np.array(
+				[[1552.3, 0,      650.1],
+				[0,       1564.8, 486.2],
+				[0,       0,      1]], dtype = "float")
+
+	#################
 
 	# Project G-Code / STL on image
 	# Image Projection
@@ -571,10 +500,10 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	 
 	# 3D model points, [mm]
 	model_points = np.array([
-				(-44.0, -44.0, 0.0),
-				(-44.0, 44.0, 0.0),
-				(44.0, 44.0, 0.0),
-				(44.0, -44.0, 0.0)
+				(-45.0, -45.0, 0.0),
+				(-45.0, 45.0, 0.0),
+				(45.0, 45.0, 0.0),
+				(45.0, -45.0, 0.0)
 				])
 
 	src = cv2.imread(image_and_layer)
@@ -617,7 +546,7 @@ def gcode_overlay(gcode_file, stl_file, image_and_layer, LAYER_NUMBER):
 	# TYPE:SUPPORT-INTERFACE   -- 5
 
 	word_bank  = []
-	layer_bank = [] # just a number of layer
+	layer_bank = [] # just number of layer
 	type_bank = []
 	line_bank = []
 	parsed_Num_of_layers = 0
