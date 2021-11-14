@@ -1,4 +1,5 @@
 
+from math import ceil
 import numpy as np
 import cv2
 import glob
@@ -78,37 +79,13 @@ def show(plane):
 #################
 
 def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUMBER): 
-	### Printing Bed Definition
-
-	x_max_bed = 120 # mm
-	y_max_bed = 90 # mm
-	z_max_bed = 50 # mm
-	img_size = img_size_y # 500 pixels
-
-	#################
 
 	layer_height = 0.1
 	z_height = layer_height*LAYER_NUMBER
-	print("z-height = {} mm".format(z_height))
-
-	### Intrinsic Camera Parameters
-
-	fx = 1000.0
-	fy = 1000.0
-	cx = 0
-	cy = 0
-
-	cam_mtx = np.array([[fx,        0,     cx], [0,         fy,    cy], [0,         0,     1]])
+	print("\nz-height for layer {}: {}mm\n".format(LAYER_NUMBER,z_height))
 
 	#################
-
-	### Intrinsic camera parameters (obtained on the calibration stage)
-	### Source images have already been undistorted
-
-	camera_intrinsic_K = np.array(
-				[[1552.3, 0,      650.1],
-				[0,       1564.8, 486.2],
-				[0,       0,      1]], dtype = "float")
+	zoom = 0.06875 # picture scale
 
 	#################
 		
@@ -126,7 +103,6 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 
 	def show(mesh,plane):
 		P = meshcut.cross_section_mesh(mesh, plane)
-		print("num contours : ", len(P))
 		if True:
 			utils.trimesh3d(mesh.verts, mesh.tris, color=(1, 1, 1),
 				opacity=0.5, representation='wireframe')
@@ -146,33 +122,27 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 
 	P1 = meshcut.cross_section_mesh(mesh_plane,stl_plane_1)
 	print('Slice: no of shapes = {}'.format(np.shape(P1)))
-	P0=P1
+
 	#################
 
 	part_height = np.max(mesh1.vectors[:,:,2])-np.min(mesh1.vectors[:,:,2])
 	print('Total height of the part = {} mm'.format(part_height))
 
 	#################
-
-	visual_markers = np.array([[-75,-75,0],[75,-75,0],[75,75,0],[-75,75,0]])
-
-	h_plane_1 = np.array([[-45,-45,z_height],[45,-45,z_height],[45,45,z_height],[-45,45,z_height]])
-
-	workspace_definition = [(-45,-45,0), (-45,45,0), (45,-45,0), (-45,-45,z_max_bed)]
+	workspace_definition = [(-zoom*img_size_x/2,-zoom*img_size_y/2,0),\
+				 (-zoom*img_size_x/2,zoom*img_size_y/2,0),\
+				 (zoom*img_size_x/2,-zoom*img_size_y/2,0),\
+				 (-zoom*img_size_x/2,-zoom*img_size_y/2,part_height)]
 	workspace_definition_array = [np.array(list(item)) for item in workspace_definition]
 
 	### Origin
-	x = 0
-	y = 0
-	z = 0
+	x = y = z = 0
 
 	xx_base, yy_base = np.meshgrid(range(-100,100), range(-100,100))
 	zz_base = np.zeros((200,200), dtype=int)
 
 	#################
-
 	### Object Transformation H
-
 	otheta_x = 0.0 # degrees
 	otheta_y = 0.0 # degrees
 	otheta_z = 0.0 # degrees
@@ -198,21 +168,6 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 
 	#################
 
-	### Intrinsic Camera Parameters
-
-	fx = 1000.0
-	fy = 1000.0
-	cx = 0
-	cy = 0
-
-	cam_mtx = np.array([[fx,        0,     cx], [0,         fy,    cy], [0,         0,     1]])
-	camera_intrinsic_K = np.array(
-				[[1552.3, 0,      650.1],
-				[0,       1564.8, 486.2],
-				[0,       0,      1]], dtype = "float")
-
-	#################
-
 	### Camera Transformation C
 
 	theta_x = -180 # degrees
@@ -221,7 +176,7 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 
 	t_x = 0.0
 	t_y = 0.0
-	t_z = 100.0+z_height 
+	t_z = 40.0+z_height 
 
 	Rx = np.array([[1,0,0],[0,np.cos(theta_x*np.pi/180),-np.sin(theta_x*np.pi/180)],\
 			[0,np.sin(theta_x*np.pi/180),np.cos(theta_x*np.pi/180)]]) # rotation around x
@@ -237,35 +192,9 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	C[0:3,0:3] = R
 	C[0:3,3] = t.T
 	C[3,3] = 1
-
-	print("C:\n{}".format(C))
+	
 	#################
-
-	### Viewing Frustum V
-
-	aspect = 1.0
-	alpha = 45.0
-	far = 80.0
-	near = 8.0
-
-	q = 1/np.tan(alpha/2)
-	a=q/aspect
-	b=(far+near)/(near-far)
-	c=(2*far*near)/(near-far)
-
-	V = np.array([[a,0,0,0],[0,q,0,0],[0,0,b,c],[0,0,-1,0]])
-
-	#################
-
-	### Sensor Parameters
-
-	sensor_width  = 3296*1.12e-6*1000
-	sensor_height = 2512*1.12e-6*1000
-
-	#################
-
 	### Camera Location
-
 	cam_main = np.array([0,0,0,1]) # Main Camera Location
 	cam_main_x = np.array([25,cam_main[1],cam_main[2],1])
 	cam_main_y = np.array([cam_main[0],25,cam_main[2],1])
@@ -274,23 +203,12 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	cam_main = np.array([cam_main,cam_main_x,cam_main_y,cam_main_z])
 
 	#################
-
 	### Watching Distance
-
-	watch = np.array([cog1[0],cog1[1],cam_main[3][2],1])
-	print('Watching point = {}'.format(watch))
-
-	#################
-
-	zoom = 5 # picture scale
-
-	#################
+	watch = np.array([0,0,25,1])
 
 	### Apply Transformation C to camera
-
 	cam_main_tr = np.zeros((4,4), dtype=float)
 	watch_tr = np.zeros((1,4), dtype=float)
-
 	#################
 
 	#------------------------------------------------- Transformed Cam Position
@@ -301,11 +219,11 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	#------------------------------------------------- Watching Distance (vectors and plane)
 
 	# create x,y
-	xx_tr, yy_tr = np.meshgrid(range(int(watch_tr[0]-zoom*sensor_width/2),int(watch_tr[0]+zoom*sensor_width/2)),\
-			range(int(watch_tr[1]-zoom*sensor_height/2),int(watch_tr[1]+zoom*sensor_height/2)))
+	xx_tr, yy_tr = np.meshgrid(range(int(-zoom*img_size_x/2),int(zoom*img_size_x/2)),\
+			range(int(-zoom*img_size_y/2),int(zoom*img_size_y/2)))
 	# corresponding z
 	mesh_dim = np.shape(xx_tr)
-	zz_tr = cam_main_tr[3][2]*np.ones([mesh_dim[0],mesh_dim[1]])
+	zz_tr = z_height*np.ones([mesh_dim[0],mesh_dim[1]])
 	#################
 
 	### Cubic printing zone
@@ -342,14 +260,13 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	# -------------------------------- Printing Bed
 	ax.add_collection3d(faces)
 	ax.plot_surface(xx_base,yy_base,zz_base, color='slategray', alpha=0.3)
-	#ax.scatter(points[:,0], points[:,1], points[:,2],c='slategray',s=20)
 	# -------------------------------- End Printing Bed
 
 	# -------------------------------- Origin (EXTENSION LINES)
 	ax.scatter3D(x,y,z,color='black',s=50)
-	ax.plot([x,60],[y,y],[z,z],color = 'r')
-	ax.plot([x,x],[0,-60],[0,0],color = 'g')
-	ax.plot([x,x],[y,y],[0,z_max_bed],color = 'b')
+	ax.plot([x,5],[y,y],[z,z],color = 'r')
+	ax.plot([x,x],[y,-5],[0,0],color = 'g')
+	ax.plot([x,x],[y,y],[0,5],color = 'b')
 	# --------------------------------End Origin
 
 	#------------------------------------------------- Transformed Camera
@@ -357,60 +274,52 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	ax.scatter(cam_main_tr[1][0],cam_main_tr[1][1],cam_main_tr[1][2],c='r') # x2
 	ax.plot([cam_main_tr[0][0],cam_main_tr[1][0]],[cam_main_tr[0][1],cam_main_tr[1][1]],\
 		[cam_main_tr[0][2],cam_main_tr[1][2]],c='r')
-	ax.text(cam_main_tr[1][0],cam_main_tr[1][1],cam_main_tr[1][2],s='x2',fontsize=10)
 
 	ax.scatter(cam_main_tr[2][0],cam_main_tr[2][1],cam_main_tr[2][2],c='g') # y2
 	ax.plot([cam_main_tr[0][0],cam_main_tr[2][0]],[cam_main_tr[0][1],cam_main_tr[2][1]],\
 		[cam_main_tr[0][2],cam_main_tr[2][2]],c='g')
-	ax.text(cam_main_tr[2][0],cam_main_tr[2][1],cam_main_tr[2][2],s='y2',fontsize=10)
 
-	ax.scatter(cam_main_tr[3][0],cam_main_tr[3][1],cam_main_tr[3][2],c='b') # z2
-
+	ax.scatter(cam_main_tr[3][0],cam_main_tr[3][1],cam_main_tr[0][2]-10,c='b') # z2
 	ax.plot([cam_main_tr[0][0],cam_main_tr[3][0]],[cam_main_tr[0][1],cam_main_tr[3][1]],\
-		[cam_main_tr[0][2],cam_main_tr[3][2]],c='b')
-	ax.text(cam_main_tr[3][0],cam_main_tr[3][1],cam_main_tr[3][2],s='z2',fontsize=10)
+		[cam_main_tr[0][2],cam_main_tr[0][2]-10],c='b')
 
-	ax.plot([cam_main_tr[0][0],watch_tr[0]],[cam_main_tr[0][1],watch_tr[1]],[cam_main_tr[0][2],watch_tr[2]],':',c='lightcoral')
-
+	ax.plot([cam_main_tr[0][0],watch_tr[0]],[cam_main_tr[0][1],watch_tr[1]],\
+	[cam_main_tr[0][2],z_height],':',c='cyan')
 	#------------------------------------------------- End Transformed Camera
 
 	#------------------------------------------------- Transformed Watching distance (PLANE)
-	ax.scatter(watch_tr[0],watch_tr[1],watch_tr[2],marker='o',color='cyan',s=20) ## point
-	ax.plot_surface(xx_tr,yy_tr,zz_tr,color='cyan', alpha=0.4) ## plane
+	ax.plot_surface(xx_tr,yy_tr,zz_tr,color='cyan', alpha=0.05) ## plane
+	ax.scatter(z,y,z_height,c='cyan')
 	#------------------------------------------------- End Transformed Watching distance (PLANE)
 
 	#------------------------------------------------- Transformed Frame (OUTLINE)
-	ax.scatter(xx_tr[0][0],yy_tr[0][0],zz_tr[0][0],color='tomato',s=50)
-	ax.scatter(xx_tr[-1][0],yy_tr[-1][0],zz_tr[-1][0],color='tomato',s=50)
-	ax.scatter(xx_tr[-1][-1],yy_tr[-1][-1],zz_tr[-1][-1],color='tomato',s=50)
-	ax.scatter(xx_tr[0][-1],yy_tr[0][-1],zz_tr[0][-1],color='tomato',s=50)
+	ax.scatter(xx_tr[0][0],yy_tr[0][0],zz_tr[0][0],color='mediumturquoise',s=50)
+	ax.scatter(xx_tr[-1][0],yy_tr[-1][0],zz_tr[-1][0],color='mediumturquoise',s=50)
+	ax.scatter(xx_tr[-1][-1],yy_tr[-1][-1],zz_tr[-1][-1],color='mediumturquoise',s=50)
+	ax.scatter(xx_tr[0][-1],yy_tr[0][-1],zz_tr[0][-1],color='mediumturquoise',s=50)
 
-	ax.plot([xx_tr[0][0],xx_tr[-1][0]],[yy_tr[0][0],yy_tr[-1][0]],[zz_tr[0][0],zz_tr[-1][0]],c='tomato')
-	ax.plot([xx_tr[-1][0],xx_tr[-1][-1]],[yy_tr[-1][0],yy_tr[-1][-1]],[zz_tr[-1][0],zz_tr[-1][-1]],c='tomato')
-	ax.plot([xx_tr[0][-1],xx_tr[-1][-1]],[yy_tr[0][-1],yy_tr[-1][-1]],[zz_tr[0][-1],zz_tr[-1][-1]],c='tomato')
-	ax.plot([xx_tr[0][-1],xx_tr[0][0]],[yy_tr[0][-1],yy_tr[0][0]],[zz_tr[0][-1],zz_tr[0][0]],c='tomato')
+	ax.plot([xx_tr[0][0],xx_tr[-1][0]],[yy_tr[0][0],yy_tr[-1][0]],[zz_tr[0][0],zz_tr[-1][0]],c='mediumturquoise')
+	ax.plot([xx_tr[-1][0],xx_tr[-1][-1]],[yy_tr[-1][0],yy_tr[-1][-1]],[zz_tr[-1][0],zz_tr[-1][-1]],c='mediumturquoise')
+	ax.plot([xx_tr[0][-1],xx_tr[-1][-1]],[yy_tr[0][-1],yy_tr[-1][-1]],[zz_tr[0][-1],zz_tr[-1][-1]],c='mediumturquoise')
+	ax.plot([xx_tr[0][-1],xx_tr[0][0]],[yy_tr[0][-1],yy_tr[0][0]],[zz_tr[0][-1],zz_tr[0][0]],c='mediumturquoise')
 
-	ax.plot([cam_main_tr[0][0],xx_tr[-1][0]],[cam_main_tr[0][1],yy_tr[-1][0]],[cam_main_tr[0][2],zz_tr[-1][0]],c='tomato')
-	ax.plot([cam_main_tr[0][0],xx_tr[0][-1]],[cam_main_tr[0][1],yy_tr[0][-1]],[cam_main_tr[0][2],zz_tr[0][-1]],c='tomato')
-	ax.plot([cam_main_tr[0][0],xx_tr[-1][-1]],[cam_main_tr[0][1],yy_tr[-1][-1]],[cam_main_tr[0][2],zz_tr[-1][-1]],c='tomato')
-	ax.plot([cam_main_tr[0][0],xx_tr[0][0]],[cam_main_tr[0][1],yy_tr[0][0]],[cam_main_tr[0][2],zz_tr[0][0]],c='tomato')
+	ax.plot([cam_main_tr[0][0],xx_tr[-1][0]],[cam_main_tr[0][1],\
+		yy_tr[-1][0]],[cam_main_tr[0][2],zz_tr[-1][0]],':',c='mediumturquoise')
+	ax.plot([cam_main_tr[0][0],xx_tr[0][-1]],[cam_main_tr[0][1],\
+		yy_tr[0][-1]],[cam_main_tr[0][2],zz_tr[0][-1]],':',c='mediumturquoise')
+	ax.plot([cam_main_tr[0][0],xx_tr[-1][-1]],[cam_main_tr[0][1],\
+		yy_tr[-1][-1]],[cam_main_tr[0][2],zz_tr[-1][-1]],':',c='mediumturquoise')
+	ax.plot([cam_main_tr[0][0],xx_tr[0][0]],[cam_main_tr[0][1],\
+		yy_tr[0][0]],[cam_main_tr[0][2],zz_tr[0][0]],':',c='mediumturquoise')
 	#------------------------------------------------- End Transformed Frame (OUTLINE)
-
-	# -------------------------------- Slice
-	for i in range(np.shape(h_plane_1)[0]):
-		ax.scatter(h_plane_1[i][0],h_plane_1[i][1],h_plane_1[i][2],c='maroon',marker='o',s=20)
-		ax.plot([h_plane_1[i][0],h_plane_1[i-1][0]],[h_plane_1[i][1],h_plane_1[i-1][1]],\
-			[h_plane_1[i][2],h_plane_1[i-1][2]],color='maroon',linewidth=2)     
-	# -------------------------------- End Slice
-
+	
 	# ------------------------------------------------------ Add stl
 	for i in range(np.shape(mesh1.normals)[0]):
 		if((np.dot(mesh1.normals[i],mesh1.vectors[i])[0])>0.0 and (np.dot(mesh1.normals[i],mesh1.vectors[i])[2])>0.0):
-			ax.add_collection3d(mplot3d.art3d.Poly3DCollection(mesh1.vectors[i:i+1],alpha=0.4,facecolor='yellow'))
+			ax.add_collection3d(mplot3d.art3d.Poly3DCollection(mesh1.vectors[i:i+1],alpha=0.4,facecolor='lightcoral'))
 		else:
-			ax.add_collection3d(mplot3d.art3d.Poly3DCollection(mesh1.vectors[i:i+1],alpha=0.3,facecolor='orangered'))
+			ax.add_collection3d(mplot3d.art3d.Poly3DCollection(mesh1.vectors[i:i+1],alpha=0.4,facecolor='orangered'))
 
-		
 	ax.add_collection3d(mplot3d.art3d.Line3DCollection(mesh1.vectors,alpha=1,linewidths=1,\
 		color=[0.1,0.1,0.1],linestyle=':'))
 
@@ -418,52 +327,51 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	ax.scatter(cog1[0],cog1[1],cog1[2],color='navy',marker='+',s=350)
 	ax.scatter(0,0,0,color='navy',marker='x',s=350)
 
-
 	for i in range(np.shape(P1[0])[0]):
-		ax.scatter(P1[0][i][0],P1[0][i][1],P1[0][i][2],color='maroon',s=20) ## MAROON OUTLINE, FOV
+		ax.scatter(P1[0][i][0],P1[0][i][1],P1[0][i][2],color='lightseagreen',s=20) ## OUTLINE
 		ax.plot([P1[0][i][0],P1[0][i-1][0]],[P1[0][i][1],P1[0][i-1][1]],[P1[0][i][2],P1[0][i-1][2]],\
-			color='darkred',linewidth=7)	## RED OUTLINE OF PART
+			color='lightseagreen',linewidth=7)	## OUTLINE OF PART
 
-	for i in range(np.shape(P0[0])[0]):
-		ax.scatter(P0[0][i][0],P0[0][i][1],P0[0][i][2],color='teal',s=20)
-		ax.plot([P0[0][i][0],P0[0][i-1][0]],[P0[0][i][1],P0[0][i-1][1]],[P0[0][i][2],P0[0][i-1][2]],\
-			color='royalblue',linewidth=7)
 	# ------------------------------------------------------ End Add stl
-
+	
 	ax.set_xlabel('X, mm')
 	ax.set_ylabel('Y, mm')
 	ax.set_zlabel('Z, mm')
 	ax.grid(False)
 	ax.set_xlim(-80,80)
 	ax.set_ylim(-80,80)
-	ax.set_zlim(0,140)
+	ax.set_zlim(0,50+ceil(z_height/10)*10)
 
 	ax.set_title('3D Printer Workspace')
-	plt.savefig('3DPrinterWorkspace.jpg')
+	plt.savefig('3DPrinterWorkspace_'+str(LAYER_NUMBER)+'.jpg')
 
+	plt_PrinterWorkspace = plt
+	
 	# ------------------------------------------------------
-	# ------------------------------------------------------
-	#################
 
 	# STL slice 
 
 	fig = plt.figure(figsize=(18,18*img_size_y/img_size_x), dpi=80)
 
-
 	for i in range(np.shape(P1[0])[0]):
-		plt.scatter(P1[0][i][0],P1[0][i][1],color='red',s=20)
-		plt.plot([P1[0][i][0],P1[0][i-1][0]],[P1[0][i][1],P1[0][i-1][1]],color='red',linewidth=2)
-	for i in range(np.shape(P0[0])[0]):
-		plt.scatter(P0[0][i][0],P0[0][i][1],color='blue',s=20)
-		plt.plot([P0[0][i][0],P0[0][i-1][0]],[P0[0][i][1],P0[0][i-1][1]],color='blue',linewidth=2)
+		plt.scatter(P1[0][i][0],P1[0][i][1],color='blue',s=20)
+		plt.plot([P1[0][i][0],P1[0][i-1][0]],[P1[0][i][1],P1[0][i-1][1]],color='blue',linewidth=2)
+
 	plt.xlabel('X, mm')
 	plt.ylabel('Y, mm')
 	plt.title('Top view from STL')
-	plt.savefig('Topview.jpg')
+	#plt.savefig('Topview.jpg')
+	plt_stl_slice = plt
+	
+	return plt_PrinterWorkspace, plt_stl_slice
 	
 
 def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUMBER):
+	### Plot overlay transparency
+	im_alpha = 0.6
 
+	### Picture scale
+	zoom = 0.06875 
 	### Intrinsic Camera Parameters
 
 	fx = 1000.0
@@ -486,9 +394,6 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 	#################
 
 	# Project G-Code / STL on image
-	# Image Projection
-	# find cam transform
-	# Based on 4 Visual Markers
 
 	#2D image points, [pixels]
 	image_points = np.array([
@@ -498,7 +403,7 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 				(0, img_size_x),
 				], dtype="double")
 	 
-	# 3D model points, [mm]
+	# 3D model points
 	model_points = np.array([
 				(-45.0, -45.0, 0.0),
 				(-45.0, 45.0, 0.0),
@@ -518,16 +423,16 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 	otheta_y = 0.0 # degrees
 	otheta_z = -90.0 # degrees
 
-	ot_x = 0.0
-	ot_y = 0.0
-	ot_z = -40.0
+	ot_x = -9.0
+	ot_y = 2.5
+	ot_z = -20.0
 
 	oRx = np.array([[1,0,0],[0,np.cos(otheta_x*np.pi/180),-np.sin(otheta_x*np.pi/180)],\
-			[0,np.sin(otheta_x*np.pi/180),np.cos(otheta_x*np.pi/180)]]) # rotation around x
+			[0,np.sin(otheta_x*np.pi/180),np.cos(otheta_x*np.pi/180)]]) # rotation around x axis
 	oRy = np.array([[np.cos(otheta_y*np.pi/180),0,np.sin(otheta_y*np.pi/180)],[0,1,0],\
-			[-np.sin(otheta_y*np.pi/180),0,np.cos(otheta_y*np.pi/180)]]) # rotation around x
+			[-np.sin(otheta_y*np.pi/180),0,np.cos(otheta_y*np.pi/180)]]) # rotation around y axis
 	oRz = np.array([[np.cos(otheta_z*np.pi/180),-np.sin(otheta_z*np.pi/180),0],\
-			[np.sin(otheta_z*np.pi/180),np.cos(otheta_z*np.pi/180),0],[0,0,1]]) # rotation around x
+			[np.sin(otheta_z*np.pi/180),np.cos(otheta_z*np.pi/180),0],[0,0,1]]) # rotation around z axis
 
 	oR = np.dot(np.dot(oRx,oRy),oRz)
 	ot = np.array([ot_x,ot_y,ot_z])
@@ -546,7 +451,7 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 	# TYPE:SUPPORT-INTERFACE   -- 5
 
 	word_bank  = []
-	layer_bank = [] # just number of layer
+	layer_bank = [] # number of layer
 	type_bank = []
 	line_bank = []
 	parsed_Num_of_layers = 0
@@ -582,10 +487,10 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 					if (line.comment.text[0:22] == "TYPE:SUPPORT-INTERFACE"):
 						gcode_type = 5
 
-
 	print("parsed_Num_of_layers: {}".format(parsed_Num_of_layers))
 	print("Layer capture: {}".format(LAYER_NUMBER))
 
+	#######################
 	fig = plt.figure(figsize=(18,14), dpi=80)
 	plt.imshow(img)
 
@@ -601,6 +506,17 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 
 	plt.plot([0,img_size_x],[0,img_size_y],c='springgreen',linestyle=':')
 	plt.plot([img_size_x,0],[0,img_size_y],c='springgreen',linestyle=':')
+	
+	plt.xlabel('X, mm')
+	plt.ylabel('Y, mm')
+	locsx, labelsx = plt.xticks()
+	labelsx = [round((float(itemx)-img_size_x/2)*zoom) for itemx in locsx]
+	plt.xticks(locsx,labelsx)
+	
+	locsy, labelsy = plt.yticks()
+	labelsy = [round((float(itemy)-img_size_y/2)*zoom) for itemy in locsy]
+	plt.yticks(locsy,labelsy)
+	#######################
 
 	for k in [LAYER_NUMBER+2]: # layers
 
@@ -698,7 +614,8 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 			tGp_default = cv2.projectPoints(np.asarray(tG_default[:,0:3],dtype=float),rotation_vector,\
 					translation_vector,camera_intrinsic_K,dist_coeffs)[0].reshape(-1, 2)
 			for i in range(np.shape(tGp_default)[0]):
-				plt.plot([tGp_default[i][0],tGp_default[i-1][0]],[tGp_default[i][1],tGp_default[i-1][1]],color='sienna')
+				plt.plot([tGp_default[i][0],tGp_default[i-1][0]],\
+				[tGp_default[i][1],tGp_default[i-1][1]],alpha=im_alpha,color='sienna')
 
 		if X_active_wall_outer:
 			G_wall_outer[:,0] = X_active_wall_outer
@@ -717,7 +634,7 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 				translation_vector,camera_intrinsic_K,dist_coeffs)[0].reshape(-1, 2)
 			for i in range(np.shape(tGp_wall_outer)[0]-1):
 				plt.plot([tGp_wall_outer[i][0],tGp_wall_outer[i-1][0]],\
-				[tGp_wall_outer[i][1],tGp_wall_outer[i-1][1]],color='deepskyblue',linewidth=4)
+				[tGp_wall_outer[i][1],tGp_wall_outer[i-1][1]],alpha=im_alpha,color='deepskyblue',linewidth=4)
 
 		if X_active_wall_inner:
 			G_wall_inner[:,0] = X_active_wall_inner
@@ -736,7 +653,7 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 				translation_vector,camera_intrinsic_K,dist_coeffs)[0].reshape(-1, 2)
 			for i in range(np.shape(tGp_wall_inner)[0]):
 				plt.plot([tGp_wall_inner[i][0],tGp_wall_inner[i-1][0]],\
-				[tGp_wall_inner[i][1],tGp_wall_inner[i-1][1]],color='tomato')
+				[tGp_wall_inner[i][1],tGp_wall_inner[i-1][1]],alpha=im_alpha,color='tomato')
 
 		if X_active_fill:
 			G_fill[:,0] = X_active_fill
@@ -754,7 +671,8 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 			tGp_fill = cv2.projectPoints(np.asarray(tG_fill[:,0:3],dtype=float),rotation_vector,\
 				translation_vector,camera_intrinsic_K,dist_coeffs)[0].reshape(-1, 2)
 			for i in range(np.shape(tGp_fill)[0]):
-				plt.plot([tGp_fill[i][0],tGp_fill[i-1][0]],[tGp_fill[i][1],tGp_fill[i-1][1]],color='aquamarine')
+				plt.plot([tGp_fill[i][0],tGp_fill[i-1][0]],\
+				[tGp_fill[i][1],tGp_fill[i-1][1]],alpha=im_alpha,color='aquamarine')
 		
 		if X_active_support:
 			G_support[:,0] = X_active_support
@@ -772,7 +690,11 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 			tGp_support = cv2.projectPoints(np.asarray(tG_support[:,0:3],dtype=float),rotation_vector,\
 				translation_vector,camera_intrinsic_K,dist_coeffs)[0].reshape(-1, 2)
 			for i in range(np.shape(tGp_support)[0]):
-				plt.plot([tGp_support[i][0],tGp_support[i-1][0]],[tGp_support[i][1],tGp_support[i-1][1]],color='yellow')
-
+				plt.plot([tGp_support[i][0],tGp_support[i-1][0]],\
+				[tGp_support[i][1],tGp_support[i-1][1]],alpha=im_alpha,color='yellow')
+	
 	plt.savefig('3DProjection.jpg')
+	plt_projection = plt
+	
+	return plt_projection
 
