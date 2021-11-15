@@ -319,7 +319,7 @@ webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, img_size_y)
 ################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
 
-z_offset = str(4.22) # z_offset = input("\nEnter height to zero bed: ")
+z_offset = str(4.275) # z_offset = input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
@@ -410,8 +410,8 @@ while True:
 					### Sleep for estimated time for layer
 
 					ts = time.strftime("%Y%m%d%H%M")
-					im_3DWorkspace = 'database/3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'_'+str(ts)+'.jpg'
-					im_Top = 'database/Topview_'+gfile_name+'_'+str(layercount)+'_'+str(ts)+'.jpg'
+					im_3DWorkspace = 'database/'+str(ts)+'_'+'3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'.jpg'
+					im_Top = 'database/'+str(ts)+'_'+'Topview_'+gfile_name+'_'+str(layercount)+'.jpg'
 					stl_3Dworkspace(img_size_x, img_size_y, stl_file, layercount, im_3DWorkspace, im_Top)
 
 					endtime = time.time()
