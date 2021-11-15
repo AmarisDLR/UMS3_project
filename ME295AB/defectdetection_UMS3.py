@@ -209,9 +209,8 @@ def capture_img(img_size_x, img_size_y, gfile_name, gcode_file, camera, frame, l
 	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
-	gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak)
-	im_projection = 'database/'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'_'+str(ts)+'.jpg'
-	gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUMBER, im_projection)
+	im_projection = 'database/'+str(ts)+'_'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'.jpg'
+	gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak, im_projection)
 
 
 def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerbreak):
@@ -320,7 +319,7 @@ webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, img_size_y)
 ################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
 
-z_offset = str(4.22) # z_offset = input("\nEnter height to zero bed: ")
+z_offset = str(4.275) # z_offset = input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
@@ -403,7 +402,7 @@ while True:
 					adjust_extruder(remote_connection, 20) ## amount to extrude in mm
 					### Position for camera capture
 					goal_Z = Z+0.1
-					goal_Y = 130+(linecount%2)/10
+					goal_Y = 135+(linecount%2)/10
 					out = remote_connection.recv(9999)
 					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
 					remote_connection.send("sendgcode G0 Z"+str(goal_Z)+"\n")
@@ -411,8 +410,8 @@ while True:
 					### Sleep for estimated time for layer
 
 					ts = time.strftime("%Y%m%d%H%M")
-					im_3DWorkspace = 'database/3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'_'+str(ts)+'.jpg'
-					im_Top = 'database/Topview_'+gfile_name+'_'+str(layercount)+'_'+str(ts)+'.jpg'
+					im_3DWorkspace = 'database/'+str(ts)+'_'+'3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'.jpg'
+					im_Top = 'database/'+str(ts)+'_'+'Topview_'+gfile_name+'_'+str(layercount)+'.jpg'
 					stl_3Dworkspace(img_size_x, img_size_y, stl_file, layercount, im_3DWorkspace, im_Top)
 
 					endtime = time.time()
