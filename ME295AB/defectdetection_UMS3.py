@@ -11,6 +11,7 @@ import time
 import re
 import paramiko
 import cv2
+from stl_visualization import *
 
 def find_init_temperature(gfile):
 ### First, find the initial temperature
@@ -200,16 +201,20 @@ def check_position(X,Y,Z,remote_connection,layerbreak):
 	else:
 		return 0
 
-def capture_img(gfile_name, camera, frame, layerbreak):
+def capture_img(img_size_x, img_size_y, gfile_name, gcode_file, camera, frame, layerbreak):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
 	ts = time.strftime("%Y%m%d%H%M")
-	imfile = "database/"+str(ts)+"_"+gfile_name+"_"+str(layerbreak)+'.jpg'
+	imfile = 'database/'+str(ts)+'_'+gfile_name+'_'+str(layerbreak)+'.jpg'
 	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
+	gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak)
+	im_projection = 'database/'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'_'+str(ts)+'.jpg'
+	gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUMBER, im_projection)
 
-def video_capture(gfile_name, webcam, layerbreak):
+
+def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerbreak):
 	count = 1
 	t = True
 	while t:
@@ -221,7 +226,7 @@ def video_capture(gfile_name, webcam, layerbreak):
 			key = cv2.waitKey(1)
 			if count == 450: ### Give time for camera with autofocus to focus
 					 ### & allow time for user to view overhead video
-				capture_img(gfile_name, webcam, frame, layerbreak)
+				capture_img(img_size_x, img_size_y, gfile_name, gcode_file, webcam, frame, layerbreak)
 				t = False
 				time.sleep(2)
 				break
@@ -291,8 +296,10 @@ print(out)
 
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "UMS3_random38_100infill"
+gfile_name = "UMS3_random39_7infill_lines"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
+gcode_file = "gcodeUM/UMS3_random39_7infill_lines_MARLIN.gcode"
+stl_file = 'gcodeUM/UMS3_random39_block.stl'
 print(gfile+"\n")
 times_file = "times.txt"
 set_time_elapsed(gfile, times_file)
@@ -304,8 +311,10 @@ set_temperature(extruder_temp, bed_temp, remote_connection,1)
 ################  Start Camera  ##################
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(0)
-webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
-webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
+img_size_x = 1600
+img_size_y = 1200
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, img_size_x)
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, img_size_y)
 #webcam.set(cv2.CAP_PROP_FPS, 15)
 
 ################  Start Printing  ##################
@@ -400,9 +409,15 @@ while True:
 					remote_connection.send("sendgcode G0 Z"+str(goal_Z)+"\n")
 					
 					### Sleep for estimated time for layer
+
+					ts = time.strftime("%Y%m%d%H%M")
+					im_3DWorkspace = 'database/3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'_'+str(ts)+'.jpg'
+					im_Top = 'database/Topview_'+gfile_name+'_'+str(layercount)+'_'+str(ts)+'.jpg'
+					stl_3Dworkspace(img_size_x, img_size_y, stl_file, layercount, im_3DWorkspace, im_Top)
+
 					endtime = time.time()
 					timediff = (endtime-starttime)
-					time.sleep(int(abs(timepause)))
+					time.sleep(int(abs(timepause-timediff)))
 					i = 0
 					for t in range(10000000):
 						if t % 2 == 1:
@@ -422,7 +437,7 @@ while True:
 							print("-",end="",flush=True)
 						i = check_position(goal_X,goal_Y,goal_Z,remote_connection, layerbreak)
 						if i == 1:
-							video_capture(gfile_name, webcam, layercount)
+							video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layercount)
 							break
 						time.sleep(2)
 						
