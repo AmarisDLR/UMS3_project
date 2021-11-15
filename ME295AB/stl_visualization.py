@@ -3,6 +3,8 @@ from math import ceil
 import numpy as np
 import cv2
 import glob
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.collections import PolyCollection
@@ -78,7 +80,7 @@ def show(plane):
 
 #################
 
-def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUMBER): 
+def stl_3Dworkspace(img_size_x, img_size_y, stl_file, LAYER_NUMBER, im_3DWorkspace, im_Top): 
 
 	layer_height = 0.1
 	z_height = layer_height*LAYER_NUMBER
@@ -250,18 +252,18 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 		[points[3], points[6], points[7], points[5]]]
 
 	#################
-
+	
 	faces = Poly3DCollection(edges, linewidths=1, edgecolors='gray')
 	faces.set_facecolor((0,0,1,0.03))
-
+	
 	fig = plt.figure(figsize=(18,18), dpi=80)
 	ax = Axes3D(fig)
-
+	
 	# -------------------------------- Printing Bed
 	ax.add_collection3d(faces)
 	ax.plot_surface(xx_base,yy_base,zz_base, color='slategray', alpha=0.3)
 	# -------------------------------- End Printing Bed
-
+	
 	# -------------------------------- Origin (EXTENSION LINES)
 	ax.scatter3D(x,y,z,color='black',s=50)
 	ax.plot([x,5],[y,y],[z,z],color = 'r')
@@ -343,10 +345,8 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	ax.set_zlim(0,50+ceil(z_height/10)*10)
 
 	ax.set_title('3D Printer Workspace')
-	plt.savefig('3DPrinterWorkspace_'+str(LAYER_NUMBER)+'.jpg')
+	plt.savefig(im_3DWorkspace)
 
-	plt_PrinterWorkspace = plt
-	
 	# ------------------------------------------------------
 
 	# STL slice 
@@ -360,13 +360,11 @@ def stl_3Dworkspace(img_size_x, img_size_y, stl_file, image_and_layer, LAYER_NUM
 	plt.xlabel('X, mm')
 	plt.ylabel('Y, mm')
 	plt.title('Top view from STL')
-	#plt.savefig('Topview.jpg')
-	plt_stl_slice = plt
-	
-	return plt_PrinterWorkspace, plt_stl_slice
-	
+	plt.savefig(im_Top)
+	print('\nImages saved.\n')
 
-def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUMBER):
+
+def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUMBER, im_projection):
 	### Plot overlay transparency
 	im_alpha = 0.6
 
@@ -423,9 +421,9 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 	otheta_y = 0.0 # degrees
 	otheta_z = -90.0 # degrees
 
-	ot_x = -9.0
-	ot_y = 2.5
-	ot_z = -20.0
+	ot_x = -16.0
+	ot_y = 4.5
+	ot_z = -28.0
 
 	oRx = np.array([[1,0,0],[0,np.cos(otheta_x*np.pi/180),-np.sin(otheta_x*np.pi/180)],\
 			[0,np.sin(otheta_x*np.pi/180),np.cos(otheta_x*np.pi/180)]]) # rotation around x axis
@@ -693,8 +691,6 @@ def gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUM
 				plt.plot([tGp_support[i][0],tGp_support[i-1][0]],\
 				[tGp_support[i][1],tGp_support[i-1][1]],alpha=im_alpha,color='yellow')
 	
-	plt.savefig('3DProjection.jpg')
-	plt_projection = plt
-	
-	return plt_projection
+	plt.savefig(im_projection)
+	print('\nProjection image saved.\n')
 

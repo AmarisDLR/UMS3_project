@@ -209,9 +209,8 @@ def capture_img(img_size_x, img_size_y, gfile_name, gcode_file, camera, frame, l
 	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
-	gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak)
-	im_projection = 'database/'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'_'+str(ts)+'.jpg'
-	gcode_overlay(img_size_x, img_size_y, gcode_file, image_and_layer, LAYER_NUMBER, im_projection)
+	im_projection = 'database/'+str(ts)+'_'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'.jpg'
+	gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak, im_projection)
 
 
 def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerbreak):
@@ -403,7 +402,7 @@ while True:
 					adjust_extruder(remote_connection, 20) ## amount to extrude in mm
 					### Position for camera capture
 					goal_Z = Z+0.1
-					goal_Y = 130+(linecount%2)/10
+					goal_Y = 135+(linecount%2)/10
 					out = remote_connection.recv(9999)
 					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
 					remote_connection.send("sendgcode G0 Z"+str(goal_Z)+"\n")
