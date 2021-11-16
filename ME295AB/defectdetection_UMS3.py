@@ -258,11 +258,12 @@ def adjust_extruder(remote_connection, amount, retract):
 		
 
 def adjust_extrusion_amount(line,alt_amount):
-	Ennn = line.split('E')
-	if Ennn:
-		Ennn = Ennn[-1]
-		Ennn_alt = float(Ennn) + alt_amount
-		line = line.replace("E"+Ennn,"E"+str(Ennn_alt))
+	if line[0] == 'G':
+		Ennn = line.split('E')
+		if Ennn:
+			Ennn = Ennn[-1]
+			Ennn_alt = float(Ennn) + alt_amount
+			line = line.replace("E"+Ennn,"E"+str(Ennn_alt))
 	return line
 
 def adjust_feedrate_amount(line,alt_factor):
@@ -329,7 +330,8 @@ z_offset = str(4.425) # z_offset = input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
-linecount = layercount = 1
+linecount = 1
+layercount = 0
 
 elapsed_time0 = X_line = Y_line = Z_line = 0
 elapsed_time, layerbreak, Z = get_time_elapsed(times)
@@ -400,7 +402,7 @@ while True:
 					Y = Y_line
 
 			if linecount == layerbreak:
-				print("\n\nLayer: "+str(linecount)+" , Breakpoints"+str(layercount)+"\n\n")
+				print("\n\nLine: "+str(linecount)+" , End Layer: "+str(layercount)+"\n\n")
 
 				if layercount % 2 == 1:
 
