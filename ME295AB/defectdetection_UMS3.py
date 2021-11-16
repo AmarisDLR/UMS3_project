@@ -32,7 +32,7 @@ def find_init_temperature(gfile):
 				break
 
 def set_temperature(extruder_temp, bed_temp, remote_connection, start):
-	if start ==1:
+	if start == 1:
 		print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
 		print("Target Bed Temperature: " + str(bed_temp) + " F\n")
 		print("\n\nStart heating\n\n")		
@@ -44,15 +44,14 @@ def set_temperature(extruder_temp, bed_temp, remote_connection, start):
 		time.sleep(2)
 		check_temperature(extruder_temp-2, bed_temp,remote_connection)
 		print("\n\nFinished heating\n\n")
-	if start == 0:
+	else:	
 		remote_connection.send("select printer printer/head/0/slot/0 \n")
 		remote_connection.send("set pre_tune_target_temperature "+ str(extruder_temp)+" \n")	
 		time.sleep(2)
 		remote_connection.send("select printer printer/bed \n")
 		time.sleep(2)
 		remote_connection.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
-		print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
-		print("Target Bed Temperature: " + str(bed_temp) + " F\n")
+
 
 def check_temperature(extruder_temp, bed_temp,remote_connection):
 	t = 1
@@ -84,9 +83,6 @@ def check_temperature(extruder_temp, bed_temp,remote_connection):
 				#print("\nCurrent extruder temperature "+str(current_ex_temp)+"\n")			
 				t = 0
 				break
-		'''if  count > 600:
-			t = 0
-			break'''
 
 def zero_bed(gfile, offset, remote_connection): 
 	with open(gfile) as gcode:
@@ -210,7 +206,7 @@ def capture_img(img_size_x, img_size_y, gfile_name, gcode_file, camera, frame, l
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
 	im_projection = 'database/'+str(ts)+'_'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'.jpg'
-	gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak, im_projection)
+	#gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak, im_projection)
 
 
 def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerbreak):
@@ -234,8 +230,9 @@ def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerb
 			break
 
 def print_initial_lines(remote_connection): ### Purge line ###
-	remote_connection.send("sendgcode G0 F600 X0 Z0.24\n")
-	remote_connection.send("sendgcode G0 E11\n")
+	remote_connection.send("sendgcode G0 F600 X0 Z0.24 E0\n")
+	remote_connection.send("sendgcode G92 E0\n")
+	remote_connection.send("sendgcode G0 E15\n")
 	time.sleep(3)
 	set_temperature(extruder_temp, bed_temp, remote_connection,2)
 	remote_connection.send("sendgcode G92 E0\n")
@@ -244,12 +241,21 @@ def print_initial_lines(remote_connection): ### Purge line ###
 	remote_connection.send("sendgcode G0 F3000 X5 \n")
 	remote_connection.send("sendgcode G0 Y100 E-5 \n")
 
-def adjust_extruder(remote_connection, amount):
-	remote_connection.send("sendgcode G91\n")	### Set Relative Positioning
-	### Retract extruder
-	remote_connection.send("sendgcode G0 F8000 E"+str(amount)+"\n")
-	time.sleep(2)
-	remote_connection.send("sendgcode G90\n")	### Set Absolute Positioning
+def adjust_extruder(remote_connection, amount, retract):
+	if retract == 1:
+		remote_connection.send("sendgcode G91\n")	### Set Relative Positioning
+		### Retract extruder
+		remote_connection.send("sendgcode G0 F8000 E"+str(amount)+"\n")
+		time.sleep(2)
+		remote_connection.send("sendgcode G90\n")	### Set Absolute Positioning
+	else: # return slowly
+		remote_connection.send("sendgcode G91\n")	### Set Relative Positioning
+		### Extruder
+		remote_connection.send("sendgcode G0 F750 E"+str(amount)+"\n")
+		time.sleep(2)
+		remote_connection.send("sendgcode G90\n")	### Set Absolute Positioning
+		remote_connection.send("sendgcode G0 F2000\n")
+		
 
 def adjust_extrusion_amount(line,alt_amount):
 	Ennn = line.split('E')
@@ -274,7 +280,7 @@ def adjust_coolingfan_speed(remote_connection,PWM):
 	remote_connection.send(command+"\n")
 
 ################  Log in to SSH  ##################
-ip_address = "10.1.10.203"
+ip_address = "10.1.10.204"
 username = "ultimaker"
 password = "ultimaker"
 ssh = paramiko.SSHClient()
@@ -288,7 +294,7 @@ remote_connection = ssh.invoke_shell()
 remote_connection.send("\n")
 out = remote_connection.recv(9999)
 print(out)
-remote_connection.send("sendgcode G92 E0\n")
+#remote_connection.send("sendgcode G92 E0\n")
 remote_connection.send("sendgcode G28 \n")
 out = remote_connection.recv(9999)
 print(out)
@@ -319,7 +325,7 @@ webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, img_size_y)
 ################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
 
-z_offset = str(4.275) # z_offset = input("\nEnter height to zero bed: ")
+z_offset = str(4.425) # z_offset = input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
@@ -333,8 +339,8 @@ time.sleep(2)
 goal_X = 10
 goal_Z = Z+2
 
-fr_factor = 1.15 ### Feedrate adjustment factor
-alt_amount = -0.4 ### Extrusion adjustment amount
+fr_factor = 1.1 ### Feedrate adjustment factor
+alt_amount = -0.125 ### Extrusion adjustment amount
 alt_temp = 0 ### Temperate adjustment amount
 
 ################  Print Loop  ##################
@@ -368,7 +374,7 @@ while True:
 
 			### Change extrusion by amount alt_amount
 			if layercount > 6:
-				line = adjust_feedrate_amount(line,alt_amount)
+				line = adjust_extrusion_amount(line,alt_amount)
 				
 			### Change temperature by amount alt_temp
 			if layercount == 7:
@@ -397,22 +403,23 @@ while True:
 				print("\n\nLayer: "+str(linecount)+" , Breakpoints"+str(layercount)+"\n\n")
 
 				if layercount % 2 == 1:
-					### Retract extruder
-					set_temperature(extruder_temp-150, bed_temp, remote_connection,2)
-					adjust_extruder(remote_connection, 20) ## amount to extrude in mm
+
 					### Position for camera capture
 					goal_Z = Z+0.1
 					goal_Y = 135+(linecount%2)/10
 					out = remote_connection.recv(9999)
-					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
 					remote_connection.send("sendgcode G0 Z"+str(goal_Z)+"\n")
+					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
+										
+					### Retract extruder
+					set_temperature(extruder_temp-20, bed_temp, remote_connection,2)
+					adjust_extruder(remote_connection, -9,1) ## amount to retract in mm
 					
 					### Sleep for estimated time for layer
-
 					ts = time.strftime("%Y%m%d%H%M")
-					im_3DWorkspace = 'database/'+str(ts)+'_'+'3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'.jpg'
-					im_Top = 'database/'+str(ts)+'_'+'Topview_'+gfile_name+'_'+str(layercount)+'.jpg'
-					stl_3Dworkspace(img_size_x, img_size_y, stl_file, layercount, im_3DWorkspace, im_Top)
+					im_3DWorkspace = 'database/'+str(ts)+'_3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'.jpg'
+					im_Top = 'database/'+str(ts)+'_Topview_'+gfile_name+'_'+str(layercount)+'.jpg'
+					#stl_3Dworkspace(img_size_x, img_size_y, stl_file, layercount, im_3DWorkspace, im_Top)
 
 					endtime = time.time()
 					timediff = (endtime-starttime)
@@ -441,6 +448,7 @@ while True:
 						time.sleep(2)
 						
 					### Position to resume printing
+					#adjust_extruder(remote_connection, 12,0) ## amount to extrude in mm
 					set_temperature(extruder_temp, bed_temp, remote_connection,2)
 					gpositionXY = "X"+str(X)+" Y"+str(Y)
 					gpositionZ = "Z"+str(Z)

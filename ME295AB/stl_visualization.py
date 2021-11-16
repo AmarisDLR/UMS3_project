@@ -82,7 +82,7 @@ def show(plane):
 
 def stl_3Dworkspace(img_size_x, img_size_y, stl_file, LAYER_NUMBER, im_3DWorkspace, im_Top): 
 
-	layer_height = 0.1
+	layer_height = 0.2
 	z_height = layer_height*LAYER_NUMBER
 	print("\nz-height for layer {}: {}mm\n".format(LAYER_NUMBER,z_height))
 
