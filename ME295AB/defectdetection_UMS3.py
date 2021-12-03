@@ -219,7 +219,7 @@ def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerb
 			check, frame = webcam.read()
 			cv2.imshow("Capturing", frame)
 			key = cv2.waitKey(1)
-			if count == 450: ### Give time for camera with autofocus to focus
+			if count == 350: ### Give time for camera with autofocus to focus
 					 ### & allow time for user to view overhead video
 				capture_img(img_size_x, img_size_y, gfile_name, gcode_file, webcam, frame, layerbreak)
 				t = False
@@ -228,7 +228,7 @@ def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerb
 		except(KeyboardInterrupt):
 			cv2.destroyAllWindows()
 			break
-
+			
 def print_initial_lines(remote_connection): ### Purge line ###
 	remote_connection.send("sendgcode G0 F600 X0 Z0.24 E0\n")
 	remote_connection.send("sendgcode G92 E0\n")
@@ -239,7 +239,8 @@ def print_initial_lines(remote_connection): ### Purge line ###
 	remote_connection.send("sendgcode G0 F1050 Y180\n")
 	remote_connection.send("sendgcode G0 Y50 E1\n")
 	remote_connection.send("sendgcode G0 F3000 X5 \n")
-	remote_connection.send("sendgcode G0 Y100 E-5 \n")
+	adjust_extruder(remote_connection, -8,1)
+
 
 def adjust_extruder(remote_connection, amount, retract):
 	if retract == 1:
@@ -255,10 +256,9 @@ def adjust_extruder(remote_connection, amount, retract):
 		time.sleep(2)
 		remote_connection.send("sendgcode G90\n")	### Set Absolute Positioning
 		remote_connection.send("sendgcode G0 F2000\n")
-		
 
 def adjust_extrusion_amount(line,alt_amount):
-	if line[0] == 'G':
+	if line[0] == 'G' and re.search('E',line):
 		Ennn = line.split('E')
 		if Ennn:
 			Ennn = Ennn[-1]
@@ -302,7 +302,7 @@ print(out)
 
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "UMS3_random39_7infill_lines"
+gfile_name = "UMS3_random40_12infill_grid"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
 gcode_file = "gcodeUM/UMS3_random39_7infill_lines_MARLIN.gcode"
 stl_file = 'gcodeUM/UMS3_random39_block.stl'
@@ -326,7 +326,7 @@ webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, img_size_y)
 ################  Start Printing  ##################
 print("\n\nStart printing from file.\n\n")
 
-z_offset = str(4.425) # z_offset = input("\nEnter height to zero bed: ")
+z_offset = str(4.415) # z_offset = input("\nEnter height to zero bed: ")
 
 gfile_print = open(gfile, "r")
 times = open(times_file,"r")
@@ -341,15 +341,15 @@ time.sleep(2)
 goal_X = 10
 goal_Z = Z+2
 
-fr_factor = 1.1 ### Feedrate adjustment factor
-alt_amount = -0.125 ### Extrusion adjustment amount
-alt_temp = 0 ### Temperate adjustment amount
+fr_factor = 1.875 ### Feedrate adjustment factor
+alt_amount = -16.0 ### Extrusion adjustment amount
+alt_temp = 3 ### Temperate adjustment amount
+b = 1
 
 ################  Print Loop  ##################
 while True:
 	try:
 		line = gfile_print.readline()
-
 		if not line or linecount==final_line:
 			
 			print("\nFinished printing. \n")  ### End of g-code file ### 
@@ -371,17 +371,18 @@ while True:
 			print("Layer: "+str(layercount)+", Line "+str(linecount)+" of "+str(layerbreak))
 
 			### Change feedrate by factor of fr_factor
-			if layercount > 3:
+			if layercount >= 0:
 				line = adjust_feedrate_amount(line,fr_factor)
-
 			### Change extrusion by amount alt_amount
-			if layercount > 6:
+			if layercount >= 1:
+				print(line)
 				line = adjust_extrusion_amount(line,alt_amount)
-				
+				print(line)
 			### Change temperature by amount alt_temp
-			if layercount == 7:
-				extruder_temp = extruder_temp + alt_temp
+			if layercount == 7 and b == 1:
+				extruder_temp += alt_temp
 				set_temperature(extruder_temp, bed_temp, remote_connection,2)
+				b=0
 
 			### Send gcode to UMS3 printer
 			remote_connection.send("sendgcode "+line+"\n")
@@ -395,7 +396,7 @@ while True:
 				print("\n\n")
 				starttime = time.time()
 
-			if linecount == layerbreak-1:	### Get final X and Y positions of layer	
+			if linecount == layerbreak-1: ### Get final X and Y positions of layer	
 				X_line,Y_line = get_XY(line)
 				if X_line > 0 and Y_line > 0:
 					X = X_line
@@ -404,7 +405,7 @@ while True:
 			if linecount == layerbreak:
 				print("\n\nLine: "+str(linecount)+" , End Layer: "+str(layercount)+"\n\n")
 
-				if layercount % 2 == 1:
+				if layercount % 2 == 0:
 
 					### Position for camera capture
 					goal_Z = Z+0.1
@@ -450,7 +451,8 @@ while True:
 						time.sleep(2)
 						
 					### Position to resume printing
-					#adjust_extruder(remote_connection, 12,0) ## amount to extrude in mm
+					#adjust_extruder(remote_connection, 12,0) ## amount to extrude in mmls
+					
 					set_temperature(extruder_temp, bed_temp, remote_connection,2)
 					gpositionXY = "X"+str(X)+" Y"+str(Y)
 					gpositionZ = "Z"+str(Z)
