@@ -5,6 +5,7 @@
 ### this code is uses g-code flavor Grifffin and does not place the origin at center.
 ### Using Ultimaker Cura, the origin is placed in the lower left corner of the printer
 ### bed (default origin).
+### Activate UMS3 Wi-Fi connection and developer mode. 
 
 import os
 import time
@@ -15,20 +16,21 @@ import cv2
 def find_init_temperature(gfile):
 ### First, find the initial temperature
 ### M109 and M104 do not work in SSH griffin
-	extruder_temp = 0
-	bed_temp = 0
-	with open(gfile) as gcode:
-		for line in gcode:
-			line = line.strip()
-			extemp = re.findall(";EXTRUDER_TRAIN.0.INITIAL_TEMPERATURE:", line)
-			btemp = re.findall(";BUILD_PLATE.INITIAL_TEMPERATURE:", line)
-			if extemp:
-				extruder_temp = line.split(":",1)[1]
-			if btemp:
-				bed_temp = line.split(":",1)[1]
-			if extruder_temp and bed_temp:
-				return float(extruder_temp), float(bed_temp)
-				break
+	extruder_temp = bed_temp = 0
+	gcode = open(gfile,'r')
+	find_temp = True
+	while find_temp:
+		line = gcode.readline()
+		extemp = re.findall(";EXTRUDER_TRAIN.0.INITIAL_TEMPERATURE:", line)
+		btemp = re.findall(";BUILD_PLATE.INITIAL_TEMPERATURE:", line)
+		if extemp:
+			extruder_temp = line.split(":",1)[1]
+		if btemp:
+			bed_temp = line.split(":",1)[1]
+		if extruder_temp and bed_temp:
+			find_temp = False
+			break
+	return float(extruder_temp), float(bed_temp)
 
 def set_temperature(extruder_temp, bed_temp, remote_connection, start):
 	if start == 1:
@@ -204,7 +206,6 @@ def capture_img(img_size_x, img_size_y, gfile_name, camera, frame, layerbreak):
 	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
-	im_projection = 'database/'+str(ts)+'_'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'.jpg'
 
 def video_capture(img_size_x, img_size_y, gfile_name, webcam, layerbreak):
 	count = 1
@@ -278,7 +279,7 @@ def adjust_coolingfan_speed(remote_connection,PWM):
 	remote_connection.send(command+"\n")
 
 ################  Log in to SSH  ##################
-ip_address = "10.1.10.203"
+ip_address = "192.168.0.226"
 username = "ultimaker"
 password = "ultimaker"
 ssh = paramiko.SSHClient()
@@ -299,7 +300,7 @@ print(out)
 
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "UMS3_pyramidbenchy_8infill_zigzag"
+gfile_name = "UMS3_random3_50infill_trihexagon"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
 
 times_file = "times.txt"
@@ -328,17 +329,17 @@ times = open(times_file,"r")
 linecount = 1
 layercount = 0
 
-elapsed_time0 = X_line = Y_line = Z_line = 0
+X_line = Y_line = Z_line = 0
 elapsed_time, layerbreak, Z = get_time_elapsed(times)
 timepause = elapsed_time
 time.sleep(2)
 
 goal_X = 10
-goal_Z = Z+2
+#goal_Z = Z+2
 
 fr_factor = 2.125 ### Feedrate adjustment factor
 alt_amount = -35.0 ### Extrusion adjustment amount
-alt_temp = -5 ### Temperate adjustment amount
+alt_temp = -5 ### Temperature adjustment amount
 b = 1
 
 ################  Print Loop  ##################
@@ -414,9 +415,6 @@ while True:
 					
 					### Sleep for estimated time for layer
 					ts = time.strftime("%Y%m%d%H%M")
-					im_3DWorkspace = 'database/'+str(ts)+'_3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'.jpg'
-					im_Top = 'database/'+str(ts)+'_Topview_'+gfile_name+'_'+str(layercount)+'.jpg'
-					#stl_3Dworkspace(img_size_x, img_size_y, stl_file, layercount, im_3DWorkspace, im_Top)
 
 					endtime = time.time()
 					timediff = (endtime-starttime)
