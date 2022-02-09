@@ -16,20 +16,21 @@ from stl_visualization import *
 def find_init_temperature(gfile):
 ### First, find the initial temperature
 ### M109 and M104 do not work in SSH griffin
-	extruder_temp = 0
-	bed_temp = 0
-	with open(gfile) as gcode:
-		for line in gcode:
-			line = line.strip()
-			extemp = re.findall(";EXTRUDER_TRAIN.0.INITIAL_TEMPERATURE:", line)
-			btemp = re.findall(";BUILD_PLATE.INITIAL_TEMPERATURE:", line)
-			if extemp:
-				extruder_temp = line.split(":",1)[1]
-			if btemp:
-				bed_temp = line.split(":",1)[1]
-			if extruder_temp and bed_temp:
-				return float(extruder_temp), float(bed_temp)
-				break
+	extruder_temp = bed_temp = 0
+	gcode = open(gfile,'r')
+	find_temp = True
+	while find_temp:
+		line = gcode.readline()
+		extemp = re.findall(";EXTRUDER_TRAIN.0.INITIAL_TEMPERATURE:", line)
+		btemp = re.findall(";BUILD_PLATE.INITIAL_TEMPERATURE:", line)
+		if extemp:
+			extruder_temp = line.split(":",1)[1]
+		if btemp:
+			bed_temp = line.split(":",1)[1]
+		if extruder_temp and bed_temp:
+			find_temp = False
+			break
+	return float(extruder_temp), float(bed_temp)
 
 def set_temperature(extruder_temp, bed_temp, remote_connection, start):
 	if start == 1:
@@ -99,9 +100,9 @@ def zero_bed(gfile, offset, remote_connection):
 def set_time_elapsed(gfile, times_file):
 	gfile_read = open(gfile, "r")	
 	times = open(times_file,"w+")
-	time1 = 0
+	time1 = Z = 0
 	count = 1
-	Z = 0
+	 0
 	t = True
 	while t:
 			line = gfile_read.readline()
