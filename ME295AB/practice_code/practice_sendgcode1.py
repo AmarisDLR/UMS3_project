@@ -1,4 +1,23 @@
 import paramiko
+import re
+import time
+
+def command(remote_connection, line):
+	matchM105 = re.findall("M105",line)
+	if line != "" and line[0] != ";" and not matchM105:
+		print(line)
+		remote_connection.send("sendgcode "+line+"\n")
+		out_line = remote_connection.recv(9999)
+		while True:
+			out_line = remote_connection.recv(9999)
+			remote_connection.send("\n")
+			print(str(out_line)+"\n")
+			time.sleep(0.2)
+			if out_line == b'\r\n':# or re.findall(r"b'\\r\\n\\r\\n",str(out_line)):
+				break
+	else:
+		print(line)
+
 
 ip_address = "192.168.0.226"
 username = "ultimaker"
@@ -21,13 +40,15 @@ print(out)
 
 while True:
 	try:
-		command = input("Enter command: ")
-		#print(command)
+		line = input("\nEnter command: ")
+		print(command)
 		remote_connection.send(command)
 		remote_connection.send("\n")
 		output = remote_connection.recv(9999)
 		print(output)
 
+
 	except(KeyboardInterrupt):
 		print("Exit program")
 		ssh.close()
+		break

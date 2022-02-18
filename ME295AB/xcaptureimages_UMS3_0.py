@@ -5,13 +5,13 @@
 ### this code is uses g-code flavor Grifffin and does not place the origin at center.
 ### Using Ultimaker Cura, the origin is placed in the lower left corner of the printer
 ### bed (default origin).
+### Activate UMS3 Wi-Fi connection and developer mode. 
 
 import os
 import time
 import re
-import paramiko
 import cv2
-from stl_visualization import *
+import paramiko
 
 def find_init_temperature(gfile):
 ### First, find the initial temperature
@@ -102,7 +102,7 @@ def set_time_elapsed(gfile, times_file):
 	times = open(times_file,"w+")
 	time1 = Z = 0
 	count = 1
-	 0
+	
 	t = True
 	while t:
 			line = gfile_read.readline()
@@ -170,7 +170,6 @@ def get_XY(line):
 	return X,Y
 
 def check_position(X,Y,Z,remote_connection,layerbreak):
-	count = 0
 	X = round(X,2)
 	Y = round(Y,2)
 	Z = round(Z,2)
@@ -198,7 +197,7 @@ def check_position(X,Y,Z,remote_connection,layerbreak):
 	else:
 		return 0
 
-def capture_img(img_size_x, img_size_y, gfile_name, gcode_file, camera, frame, layerbreak):
+def capture_img(img_size_x, img_size_y, gfile_name, camera, frame, layerbreak):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
 	ts = time.strftime("%Y%m%d%H%M")
@@ -206,11 +205,8 @@ def capture_img(img_size_x, img_size_y, gfile_name, gcode_file, camera, frame, l
 	print(imfile)
 	cv2.imwrite(filename=imfile, img=frame)
 	print("Image saved!")
-	im_projection = 'database/'+str(ts)+'_'+'3DProjection_'+gfile_name+'_'+str(layerbreak)+'.jpg'
-	#gcode_overlay(img_size_x, img_size_y, gcode_file, imfile, layerbreak, im_projection)
 
-
-def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerbreak):
+def video_capture(img_size_x, img_size_y, gfile_name, webcam, layerbreak):
 	count = 1
 	t = True
 	while t:
@@ -220,9 +216,9 @@ def video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layerb
 			check, frame = webcam.read()
 			cv2.imshow("Capturing", frame)
 			key = cv2.waitKey(1)
-			if count == 350: ### Give time for camera with autofocus to focus
+			if count == 275: ### Give time for camera with autofocus to focus
 					 ### & allow time for user to view overhead video
-				capture_img(img_size_x, img_size_y, gfile_name, gcode_file, webcam, frame, layerbreak)
+				capture_img(img_size_x, img_size_y, gfile_name, webcam, frame, layerbreak)
 				t = False
 				time.sleep(2)
 				break
@@ -263,8 +259,9 @@ def adjust_extrusion_amount(line,alt_amount):
 		Ennn = line.split('E')
 		if Ennn:
 			Ennn = Ennn[-1]
-			Ennn_alt = float(Ennn) + alt_amount
-			line = line.replace("E"+Ennn,"E"+str(Ennn_alt))
+			Ennn = re.findall(r'[-?\d.\d]+',Ennn)
+			Ennn_alt = float(Ennn[0]) + alt_amount
+			line = line.replace("E"+Ennn[0],"E"+str(Ennn_alt))
 	return line
 
 def adjust_feedrate_amount(line,alt_factor):
@@ -282,7 +279,7 @@ def adjust_coolingfan_speed(remote_connection,PWM):
 	remote_connection.send(command+"\n")
 
 ################  Log in to SSH  ##################
-ip_address = "10.1.10.204"
+ip_address = "192.168.0.226"
 username = "ultimaker"
 password = "ultimaker"
 ssh = paramiko.SSHClient()
@@ -303,11 +300,9 @@ print(out)
 
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "UMS3_random40_12infill_grid"
+gfile_name = "UMS3_sphere"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
-gcode_file = "gcodeUM/UMS3_random39_7infill_lines_MARLIN.gcode"
-stl_file = 'gcodeUM/UMS3_random39_block.stl'
-print(gfile+"\n")
+
 times_file = "times.txt"
 set_time_elapsed(gfile, times_file)
 
@@ -334,17 +329,17 @@ times = open(times_file,"r")
 linecount = 1
 layercount = 0
 
-elapsed_time0 = X_line = Y_line = Z_line = 0
+X_line = Y_line = Z_line = 0
 elapsed_time, layerbreak, Z = get_time_elapsed(times)
 timepause = elapsed_time
 time.sleep(2)
 
 goal_X = 10
-goal_Z = Z+2
 
-fr_factor = 1.875 ### Feedrate adjustment factor
-alt_amount = -16.0 ### Extrusion adjustment amount
-alt_temp = 3 ### Temperate adjustment amount
+fr_factor = 1.25 ### Feedrate adjustment factor
+alt_amount = -48.0 ### Extrusion adjustment amount
+alt_temp = -7 ### Temperature adjustment amount
+
 b = 1
 
 ################  Print Loop  ##################
@@ -373,17 +368,18 @@ while True:
 
 			### Change feedrate by factor of fr_factor
 			if layercount >= 0:
+				line = adjust_feedrate_amount(line,1.01)
+			if layercount >= 25:
 				line = adjust_feedrate_amount(line,fr_factor)
 			### Change extrusion by amount alt_amount
 			if layercount >= 1:
-				print(line)
 				line = adjust_extrusion_amount(line,alt_amount)
-				print(line)
 			### Change temperature by amount alt_temp
-			if layercount == 7 and b == 1:
+			if layercount == 1 and b == 1:
 				extruder_temp += alt_temp
 				set_temperature(extruder_temp, bed_temp, remote_connection,2)
 				b=0
+
 
 			### Send gcode to UMS3 printer
 			remote_connection.send("sendgcode "+line+"\n")
@@ -406,14 +402,14 @@ while True:
 			if linecount == layerbreak:
 				print("\n\nLine: "+str(linecount)+" , End Layer: "+str(layercount)+"\n\n")
 
-				if layercount % 2 == 0:
+				if layercount % 4 == 0:
 
 					### Position for camera capture
 					goal_Z = Z+0.1
-					goal_Y = 135+(linecount%2)/10
+					goal_Y = 110+(linecount%2)/10
 					out = remote_connection.recv(9999)
 					remote_connection.send("sendgcode G0 Z"+str(goal_Z)+"\n")
-					remote_connection.send("sendgcode G0 F7000 X0 Y150\n")
+					remote_connection.send("sendgcode G0 F7000 X0 Y"+str(goal_Y)+"\n")
 										
 					### Retract extruder
 					set_temperature(extruder_temp-20, bed_temp, remote_connection,2)
@@ -421,9 +417,6 @@ while True:
 					
 					### Sleep for estimated time for layer
 					ts = time.strftime("%Y%m%d%H%M")
-					im_3DWorkspace = 'database/'+str(ts)+'_3DPrinterWorkspace_'+gfile_name+'_'+str(layercount)+'.jpg'
-					im_Top = 'database/'+str(ts)+'_Topview_'+gfile_name+'_'+str(layercount)+'.jpg'
-					#stl_3Dworkspace(img_size_x, img_size_y, stl_file, layercount, im_3DWorkspace, im_Top)
 
 					endtime = time.time()
 					timediff = (endtime-starttime)
@@ -432,7 +425,7 @@ while True:
 					for t in range(10000000):
 						if t % 2 == 1:
 							print("*",end="",flush=True)
-						i = check_position(0,150,goal_Z,remote_connection, layerbreak)
+						i = check_position(0,goal_Y,goal_Z,remote_connection, layerbreak)
 						if i == 1:
 							print("|",end="",flush=True)
 							break
@@ -447,7 +440,7 @@ while True:
 							print("-",end="",flush=True)
 						i = check_position(goal_X,goal_Y,goal_Z,remote_connection, layerbreak)
 						if i == 1:
-							video_capture(img_size_x, img_size_y, gfile_name, gcode_file, webcam, layercount)
+							video_capture(img_size_x, img_size_y, gfile_name, webcam, layercount)
 							break
 						time.sleep(2)
 						
