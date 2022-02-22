@@ -225,12 +225,12 @@ time.sleep(2)
 
 ### Get times between layers
 print('\n\n\n')
-gfile_name = 'CE3_random4'
+gfile_name = 'CE3_random1'
 gfile = "C:/Users/amari/Downloads/gcode_ender3/"+gfile_name+".gcode"
 times_file = "E:/AM_Papers/Ender3/times.txt"
 set_time_elapsed(gfile, times_file)
 
-n_layers = 3 ## Capture images at every n layers
+n_layers = 1 ## Capture images at every n layers
 
 ### Get initial temperatures
 extruder_temp, bed_temp = find_init_temperature(gfile)
@@ -262,17 +262,17 @@ time.sleep(2)
 
 goal_X = 25
 
-fr_factor = 1.125 ### Feedrate adjustment factor
-alt_amount = 10.0 ### Extrusion adjustment factor
-alt_temp = 7 ### Temperature adjustment factor
-fanPWM = 90 ### PWM <0-100>
+fr_factor = 0.725 ### Feedrate adjustment factor
+alt_amount = 5 ### Extrusion adjustment factor
+alt_temp = 5 ### Temperature adjustment factor
+fanPWM = 100 ### PWM <0-255>
 
 ###### Print Loop ######
 while True:
     try:
         line = gfile_print.readline()
 
-        if not line or linecount == final_line:
+        if not line or linecount == final_line or layercount == 1:
             print("\nFinished printing.\n") ### End of g-code file
             adjust_extruder(ender3,-3,1 ) ## amount to retract in mm
             command(ender3,"G0 Y200")
@@ -300,7 +300,7 @@ while True:
             
             ### Change feedrate by factor of fr_factor
             if linecount > 30:
-                if layercount > 3:
+                if layercount >= 0:
                     line = adjust_feedrate_amount(line, fr_factor)
                 else:
                     line = adjust_feedrate_amount(line, 0.85)
@@ -310,10 +310,13 @@ while True:
                 ### Change temperature by alt_temp
                 if linecount == 350:
                     extruder_temp += alt_temp
+                    print("Extruder Temp: "+str(extruder_temp))
                     set_temperature(ender3, extruder_temp, bed_temp)
+                else:
+                    print(extruder_temp)
                 ### Change fan speed (PWM)
-                if layercount == 5:
-                    adjust_coolingfan_speed(ender3,80)
+                if layercount >= 0:
+                    adjust_coolingfan_speed(ender3,fanPWM)
 
             ### Send g-code to Ender3
             command(ender3, line)
@@ -338,7 +341,7 @@ while True:
                     adjust_extruder(ender3,-8,1 ) ## amount to retract in mm
 
                     ### Position for Camera Capture
-                    goal_Z = Z + 75 #55
+                    goal_Z = Z + 55
                     goal_Y = 135+(linecount%2)/10
                     command(ender3,"G0 Z"+str(goal_Z))
                     command(ender3,"G0 F5000 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z))
