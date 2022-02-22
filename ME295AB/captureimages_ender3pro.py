@@ -263,8 +263,8 @@ time.sleep(2)
 goal_X = 25
 
 fr_factor = 0.725 ### Feedrate adjustment factor
-alt_amount = 5 ### Extrusion adjustment factor
-alt_temp = 5 ### Temperature adjustment factor
+alt_amount = 8 ### Extrusion adjustment factor
+alt_temp = 15 ### Temperature adjustment factor
 fanPWM = 100 ### PWM <0-255>
 
 ###### Print Loop ######
@@ -277,8 +277,9 @@ while True:
             adjust_extruder(ender3,-3,1 ) ## amount to retract in mm
             command(ender3,"G0 Y200")
             cv2.destroyAllWindows()
-            ender3.close()
+            set_temperature(ender3, extruder_temp/2, bed_temp/2)
             wait_finish = input("\nConfirmpiece is removed from print bed by hitting 'enter'.\n")
+            ender3.close()
             break
 
         elif key == ord('r'): ### Reset
