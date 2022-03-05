@@ -5,6 +5,7 @@ import cv2
 from pygrabber.dshow_graph import FilterGraph
 
 import serial
+import serial.tools.list_ports
 
 def getCameraIndex(camName):
     graph = FilterGraph()
@@ -220,12 +221,14 @@ def check_position(ser, goalx, goaly, goalz):
         count +=1
 
 ### Connect to Ender3 (Serial Printer)
-ender3 = serial.Serial('COM4',baudrate=115200)
+port_printer = [comport.device for comport in serial.tools.list_ports.comports()][0] 
+ender3 = serial.Serial(port_printer,baudrate=115200)
+print("Printer available on COM port: "+port_printer)
 time.sleep(2)
 
 ### Get times between layers
 print('\n\n\n')
-gfile_name = 'CE3_random1'
+gfile_name = 'CE3_random8'
 gfile = "C:/Users/amari/Downloads/gcode_ender3/"+gfile_name+".gcode"
 times_file = "E:/AM_Papers/Ender3/times.txt"
 set_time_elapsed(gfile, times_file)
@@ -262,23 +265,24 @@ time.sleep(2)
 
 goal_X = 25
 
-fr_factor = 0.725 ### Feedrate adjustment factor
-alt_amount = 5 ### Extrusion adjustment factor
-alt_temp = 5 ### Temperature adjustment factor
-fanPWM = 100 ### PWM <0-255>
+fr_factor = 0.755 ### Feedrate adjustment factor
+alt_amount = -5 ### Extrusion adjustment factor
+alt_temp = 15 ### Temperature adjustment factor
+fanPWM = 80 ### PWM <0-255>
 
 ###### Print Loop ######
 while True:
     try:
         line = gfile_print.readline()
 
-        if not line or linecount == final_line or layercount == 1:
+        if not line or linecount == final_line:# or layercount == 1:
             print("\nFinished printing.\n") ### End of g-code file
             adjust_extruder(ender3,-3,1 ) ## amount to retract in mm
-            command(ender3,"G0 Y200")
+            command(ender3,"G0 Y200 Z"+str(Z+10))
             cv2.destroyAllWindows()
-            ender3.close()
+            set_temperature(ender3, extruder_temp/2, bed_temp/2)
             wait_finish = input("\nConfirmpiece is removed from print bed by hitting 'enter'.\n")
+            ender3.close()
             break
 
         elif key == ord('r'): ### Reset
@@ -299,13 +303,18 @@ while True:
             print("Layer "+str(layercount)+", Line "+str(linecount)+" of "+str(layerbreak))
             
             ### Change feedrate by factor of fr_factor
+            ### if linecount == 0:   
+
             if linecount > 30:
                 if layercount >= 0:
                     line = adjust_feedrate_amount(line, fr_factor)
                 else:
                     line = adjust_feedrate_amount(line, 0.85)
                 ### Change extrusion amount by alt_amount
-                if layercount >= 0:
+                if linecount%75 == 0 or linecount%25 ==0:
+                    alt_amount +=-.75
+                    line = adjust_extrusion_amount(line, alt_amount)
+                else:
                     line = adjust_extrusion_amount(line, alt_amount)
                 ### Change temperature by alt_temp
                 if linecount == 350:
