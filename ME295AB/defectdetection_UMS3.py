@@ -312,7 +312,7 @@ print(out)
 
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "UMS3_random9_35infill_triangles"
+gfile_name = "UMS3_bear_10infill_trihexagon"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
 
 times_file = "times.txt"
@@ -358,9 +358,9 @@ time.sleep(2)
 
 goal_X = 10
 
-fr_factor = 0.95 ### Feedrate adjustment factor
-alt_amount = -10.0 ### Extrusion adjustment amount
-alt_temp = -7 ### Temperature adjustment amount
+fr_factor = 0.75 ### Feedrate adjustment factor
+alt_amount = -15.0 ### Extrusion adjustment amount
+alt_temp = -5 ### Temperature adjustment amount
 
 
 ################  Print Loop  ##################
@@ -380,7 +380,7 @@ while True:
             webcam.release()
             cv2.destroyAllWindows()
             command = input("\nConfirm piece is removed from print bed by hitting 'enter'. \n")
-            ssh.close()
+            remote_connection.close()
             os.remove(times_file)
             break
 
@@ -395,7 +395,7 @@ while True:
                 else:
                     line = adjust_feedrate_amount(line,fr_factor)
 				### Change extrusion by amount alt_amount
-                if layercount >= 1:
+                if layercount >= 0:
                     line = adjust_extrusion_amount(line,alt_amount)
                     ### Change temperature by amount alt_temp
                 if layercount == 1 and (linecount-layerbreak) == 0:
@@ -504,6 +504,7 @@ while True:
         sendgcode(remote_connection,"G28 Z")
         webcam.release()
         cv2.destroyAllWindows()
+        remote_connection.close()
         break
 
 

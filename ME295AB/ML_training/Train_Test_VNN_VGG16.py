@@ -27,6 +27,7 @@ from tensorflow.keras.layers import Dropout, Flatten, Dense
 #####################################
 def label_arrays(directory, row_dim):
     n = 0
+    labels = []
     for root, subdir, files in os.walk(directory):
         for subfolder in subdir:
             classes = os.path.join(directory,subfolder)
