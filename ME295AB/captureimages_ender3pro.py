@@ -2,6 +2,7 @@ import os
 import time
 import re
 import cv2
+import keyboard
 from pygrabber.dshow_graph import FilterGraph
 
 import serial
@@ -200,9 +201,10 @@ def check_position(ser, goalx, goaly, goalz):
     Z = round(goalz,2)
     moving = True
     while moving:
-        print("*",end="",flush=True)
+        #print("*",end="",flush=True)
         ser.write(str.encode("M114\r\n")) 
         line = ser.readline()
+        time.sleep(0.001)
         if line != b'ok\n' and re.findall("Count",str(line)):
             line = str(line)
             print(line)
@@ -210,13 +212,18 @@ def check_position(ser, goalx, goaly, goalz):
             xc = float(re.findall(r'[\d.\d]+', split_line[0])[0])
             yc = float(re.findall(r'[\d.\d]+', split_line[1])[0])
             zc = float(re.findall(r'[\d.\d]+', split_line[2])[0])
-            x_compare = xc-0.01 <= X <= xc+0.1
-            y_compare = yc-0.01 <= Y <= yc+0.1
-            z_compare = zc-0.01 <= Z <= zc+0.1
+            x_compare = xc-0.02 <= X <= xc+0.2
+            y_compare = yc-0.02 <= Y <= yc+0.2
+            z_compare = zc-0.02 <= Z <= zc+0.2
+            print("Goal: "+str(goal_X)+" "+str(goal_Y)+" "+str(goal_Z))
+            print("Compare: "+str(xc)+" "+str(yc)+" "+str(zc))
             if x_compare and y_compare and z_compare:
                 moving = False
-        elif count > 1000:
+                break
+        elif count > 10000:
             moving = False
+        elif count%200 == 0:
+            command(ser,"G0 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z))
 
         count +=1
 
@@ -224,11 +231,11 @@ def check_position(ser, goalx, goaly, goalz):
 port_printer = [comport.device for comport in serial.tools.list_ports.comports()][0] 
 ender3 = serial.Serial(port_printer,baudrate=115200)
 print("Printer available on COM port: "+port_printer)
-time.sleep(2)
+time.sleep(1)
 
 ### Get times between layers
 print('\n\n\n')
-gfile_name = 'CE3_random8'
+gfile_name = 'CE3_random5'
 gfile = "C:/Users/amari/Downloads/gcode_ender3/"+gfile_name+".gcode"
 times_file = "E:/AM_Papers/Ender3/times.txt"
 set_time_elapsed(gfile, times_file)
@@ -274,8 +281,8 @@ fanPWM = 80 ### PWM <0-255>
 while True:
     try:
         line = gfile_print.readline()
-
-        if not line or linecount == final_line:# or layercount == 1:
+        endprint = re.findall(";Wipe out",line)
+        if not line or endprint or linecount == final_line:
             print("\nFinished printing.\n") ### End of g-code file
             adjust_extruder(ender3,-3,1 ) ## amount to retract in mm
             command(ender3,"G0 Y200 Z"+str(Z+10))
@@ -285,26 +292,10 @@ while True:
             ender3.close()
             break
 
-        elif key == ord('r'): ### Reset
-            print("\n\nRESET\n")
-            time.sleep(3)
-            command(ender3,"G28")
-            gfile_print.seek(0)
-            times.seek(0)
-            linecount = 1
-            layercount = 0
-
-            X_line = Y_line = Z_line = 0
-            elapsed_time, layerbreak, Z = get_time_elapsed(times)
-            timepause = elapsed_time
-            time.sleep(2)
-
         else:
             print("Layer "+str(layercount)+", Line "+str(linecount)+" of "+str(layerbreak))
             
-            ### Change feedrate by factor of fr_factor
-            ### if linecount == 0:   
-
+            ###### Change printer settings ######
             if linecount > 30:
                 if layercount >= 0:
                     line = adjust_feedrate_amount(line, fr_factor)
@@ -326,16 +317,13 @@ while True:
                 ### Change fan speed (PWM)
                 if layercount >= 0:
                     adjust_coolingfan_speed(ender3,fanPWM)
+            ###### Change printer settings ######
 
-            ### Send g-code to Ender3
+
+            ###### Send g-code to Ender3
             command(ender3, line)
-            endprint = re.findall(";Wipe out",line)
-            if endprint:
-                command(ender3, "G90 ;Absolute positioning")
-                command(ender3,"G0 Z"+str(goal_Z))
-                linecount = final_line
 
-            if linecount == layerbreak-1: ### Get final X and Y positions of layer
+            if linecount == layerbreak-1: ### Get layer final X and Y positions
                 X_line, Y_line = get_XY(line)
                 if X_line > 0 and Y_line > 0:
                     X = X_line
