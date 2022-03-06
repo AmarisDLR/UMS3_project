@@ -34,7 +34,7 @@ def command(ser, line):
 def set_time_elapsed(gfile, times_file):
     gfile_read = open(gfile,'r')
     times = open(times_file,'w+')
-    time1 = 0
+    time_elapsed = time1 = 0
     count = 1
     Z = 0
     t = True
@@ -174,7 +174,6 @@ def video_capture(gfile_name, webcam, layerbreak):
             count += 1
             check, frame = webcam.read()
             cv2.imshow("Capturing", frame)
-            key = cv2.waitKey(1)
             if count == 355: ### Give time for camera to autofocus
                             ### & allow time for user to view camera feed
                 capture_image(gfile_name, webcam, frame, layerbreak)
