@@ -17,7 +17,7 @@ from tensorflow.keras import layers
 from tensorflow.keras import Model
 from tensorflow.keras.optimizers import Adam, RMSprop, SGD
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications import VGG16
+from tensorflow.keras.applications import VGG19
 from tensorflow.keras import callbacks
 
 from tensorflow.keras.layers import Dropout, Flatten, Dense
@@ -26,7 +26,7 @@ import wandb
 from wandb.keras import WandbCallback
 
 
-wandb.init(project="ums3", entity="amarisdlr")
+wandb.init(project="ums3_vgg19", entity="amarisdlr")
 
 ### Work with pre-split data
 
@@ -117,7 +117,7 @@ print('\n\nShuffled.\n\n')
 #####################################
 
 # We build the base model
-base_model = VGG16(weights='imagenet',
+base_model = VGG19(weights='imagenet',
     include_top=False,
     input_shape=input_shape)
 base_model.summary()
@@ -135,15 +135,15 @@ for layer in base_model.layers:
 # We take the last layer of our the model and add it to our classifier
 last = base_model.layers[-1].output
 x = Flatten()(last)
-x = Dense(800, activation='relu', name='fc1')(x) #800 #relu
-dropout=0.3#0.55
+x = Dense(16, activation='relu', name='fc1')(x) #800 #relu
+dropout=0.15
 x = Dropout(dropout)(x) #0.3
 x = Dense(train_size, activation='softmax', name='predictions')(x)#softmax
 
 model = Model(base_model.input, x)
 
 # We compile the model
-lr = 0.0001
+lr = 0.00001
 model.compile(optimizer=RMSprop(lr=lr), #lr=0.001
     loss='categorical_crossentropy',
     metrics=['accuracy','categorical_accuracy','categorical_crossentropy'])
