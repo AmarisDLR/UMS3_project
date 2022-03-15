@@ -48,64 +48,66 @@ def find_init_temperature(gfile):
 	return float(extruder_temp), float(bed_temp)
 
 def set_temperature(extruder_temp, bed_temp, printer, start):
-	if start == 1:
-		out = str(printer.recv(9999))
-		print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
-		print("Target Bed Temperature: " + str(bed_temp) + " F\n")
-		print("\n\nStart heating\n\n")	
-		printer.send("select printer printer/bed\n")
-		printer.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
-		time.sleep(3)
-		printer.send("select printer printer/head/0/slot/0 \n")
-		printer.send("set pre_tune_target_temperature "+ str(extruder_temp-2)+" \n")	
-		time.sleep(2)
-		check_temperature(extruder_temp-2, bed_temp,printer)
-		print("\n\nFinished heating\n\n")
-	else:	
-		printer.send("select printer printer/head/0/slot/0 \n")
-		printer.send("set pre_tune_target_temperature "+ str(extruder_temp)+" \n")	
-		time.sleep(2)
-		printer.send("select printer printer/bed \n")
-		time.sleep(2)
-		printer.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
+    bed_temp += 15
+    if start == 1:
+        str(printer.recv(9999))
+        print("\nTarget Extruder Temperature: " + str(extruder_temp) + " F\n")
+        print("Target Bed Temperature: " + str(bed_temp) + " F\n")
+        print("\n\nStart heating\n\n")	
+        printer.send("select printer printer/bed\n")
+        printer.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
+        time.sleep(3)
+        printer.send("select printer printer/head/0/slot/0 \n")
+        printer.send("set pre_tune_target_temperature "+ str(extruder_temp)+" \n")	
+        time.sleep(2)
+        check_temperature(extruder_temp, bed_temp,printer)
+        print("\n\nFinished heating\n\n")
+    else:	
+        printer.send("select printer printer/head/0/slot/0 \n")
+        printer.send("set pre_tune_target_temperature "+ str(extruder_temp)+" \n")	
+        time.sleep(2)
+        printer.send("select printer printer/bed \n")
+        time.sleep(2)
+        printer.send("set pre_tune_target_temperature "+ str(bed_temp)+" \n")
 
 
 def check_temperature(extruder_temp, bed_temp,printer):
-	t = 1
-	count = 0
-	printer.recv(9999)
-	while t:
-		count += 1
-		printer.send("select printer printer/bed\n")
-		printer.recv(9999)
-		printer.send("get current_temperature \n")
-		time.sleep(1.5)
-		out = str(printer.recv(9999))
-		current_bed_temp = re.findall(r'[\d.\d]+', out) ### current bed temperature
-		if current_bed_temp:
-			current_bed_temp = float(current_bed_temp[0])
-
-		printer.send("select printer printer/head/0/slot/0 \n")
-		printer.recv(9999)
-		printer.send("get current_temperature \n")
-		time.sleep(1.5)
-		out = str(printer.recv(9999))
-		current_ex_temp = re.findall(r'[\d.\d]+', out) ### current extruder temperature
-		if current_ex_temp:
-			current_ex_temp = float(current_ex_temp[0])
-			if count%2 == 0:		
-				print("*",end="",flush=True)
-			print("current_bed_temp "+str(current_bed_temp)+"\t"+"bed_temp "+str(bed_temp))
-			print("current_ex_temp "+str(current_ex_temp)+"\t"+"extruder_temp "+str(extruder_temp))
-			if  current_bed_temp>=bed_temp-0.5 and current_ex_temp>=extruder_temp-0.5:		
-				t = 0
-				break
+    t = 1
+    count = current_bed_temp = current_ex_temp = 0
+    printer.recv(9999)
+    while t:
+        count += 1
+        printer.send("select printer printer/bed\n")
+        printer.recv(9999)
+        printer.send("get current_temperature \n")
+        time.sleep(1.5)
+        out = str(printer.recv(9999))
+        find_bed_temp = re.findall(r'[\d.\d]+', out) ### current bed temperature
+        
+        printer.send("select printer printer/head/0/slot/0 \n")
+        printer.recv(9999)
+        printer.send("get current_temperature \n")
+        time.sleep(1.5)
+        out = str(printer.recv(9999))
+        find_ex_temp = re.findall(r'[\d.\d]+', out) ### current extruder temperature
+        
+        if find_bed_temp and find_ex_temp:
+            current_bed_temp = float(find_bed_temp[0])
+            current_ex_temp = float(find_ex_temp[0])
+            if count%2 == 0:
+                temp_str = f"E: {current_ex_temp}/{extruder_temp}\tB: {current_bed_temp}/{bed_temp}"
+                #print("*",end="",flush=True)
+                print(temp_str)
+        
+        if  current_bed_temp>=bed_temp-0.5 and current_ex_temp>=extruder_temp-0.5:		
+            t = 0
+            break
 
 def zero_bed(offset, printer): 
 	sendgcode(printer,"G0 F450 Y180 Z"+offset)
 	sendgcode(printer,"G92 Z0")
 	time.sleep(1)
-	out = printer.recv(9999)
+	printer.recv(9999)
 
 def set_time_elapsed(gfile, times_file):
 	gfile_read = open(gfile, "r")	
@@ -312,7 +314,7 @@ print(out)
 
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "UMS3_random9_35infill_triangles"
+gfile_name = "UMS3_random39_7infill_lines"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
 
 times_file = "times.txt"
@@ -327,10 +329,10 @@ set_temperature(extruder_temp, bed_temp, remote_connection,1)
 camIdx = getCameraIndex('IPEVO V4K') ## Enter camera name or 'unsure' to get
                                      ## a list of available cameras and select
                                      ## desired index number
-key = cv2.waitKey(1)
+key = cv2.waitKey(camIdx)
 webcam = cv2.VideoCapture(camIdx,cv2.CAP_DSHOW)
-img_size_x = 1600
-img_size_y = 1200
+img_size_x =2400
+img_size_y = 2400
 webcam.set(cv2.CAP_PROP_FRAME_WIDTH, img_size_x)
 webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, img_size_y)
 #webcam.set(cv2.CAP_PROP_FPS, 15)
@@ -358,10 +360,10 @@ time.sleep(2)
 
 goal_X = 10
 
-fr_factor = 0.95 ### Feedrate adjustment factor
-alt_amount = -10.0 ### Extrusion adjustment amount
+fr_factor = 0.75 ### Feedrate adjustment factor
+alt_amount = -0.50 ### Extrusion adjustment amount
 alt_temp = -7 ### Temperature adjustment amount
-
+fanPWM = 255*0.9 ### <0-255>
 
 ################  Print Loop  ##################
 while True:
@@ -388,19 +390,31 @@ while True:
             time.sleep(0.01)
             print("Layer: "+str(layercount)+", Line "+str(linecount)+" of "+str(layerbreak))
 			
-            if linecount > 33:
-                ### Change feedrate by factor of fr_factor
-                if layercount < 25:
-                    line = adjust_feedrate_amount(line,fr_factor)
+            ###### Change printer settings ######
+            if linecount > 30:
+                if layercount >= 0:
+                    line = adjust_feedrate_amount(line, fr_factor)
                 else:
-                    line = adjust_feedrate_amount(line,fr_factor)
-				### Change extrusion by amount alt_amount
-                if layercount >= 1:
-                    line = adjust_extrusion_amount(line,alt_amount)
-                    ### Change temperature by amount alt_temp
-                if layercount == 1 and (linecount-layerbreak) == 0:
+                    line = adjust_feedrate_amount(line, 0.85)
+                ### Change extrusion amount by alt_amount
+                if layercount > 1 and linecount%25 == 0:
+                    alt_amount +=-.05
+                    line = adjust_extrusion_amount(line, alt_amount)
+                else:
+                    line = adjust_extrusion_amount(line, alt_amount)
+                ### Change temperature by alt_temp
+                if linecount == 350:
                     extruder_temp += alt_temp
+                    print("Extruder Temp: "+str(extruder_temp))
                     set_temperature(extruder_temp, bed_temp, remote_connection,2)
+                else:
+                    print(extruder_temp)
+                ### Change fan speed (PWM)
+                if layercount >= 0:
+                    adjust_coolingfan_speed(remote_connection,fanPWM)
+            ###### Change printer settings ######
+            
+
 
 
             ### Send gcode to UMS3 printer

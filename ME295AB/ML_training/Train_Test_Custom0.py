@@ -13,20 +13,19 @@ import time
 import matplotlib.pyplot as plt
 
 import tensorflow as tf
-from tensorflow.keras import layers
 from tensorflow.keras import Model
+from tensorflow.keras import models
+from tensorflow.keras import layers #import Conv2D, MaxPooling2D, Dense, Flatten, Dropout
 from tensorflow.keras.optimizers import Adam, RMSprop, SGD
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import VGG16
-from tensorflow.keras import callbacks
 
-from tensorflow.keras.layers import Dropout, Flatten, Dense
 
 import wandb
 from wandb.keras import WandbCallback
 
 
-wandb.init(project="ums3", entity="amarisdlr")
+wandb.init(project="ums3_custom", entity="amarisdlr")
 
 ### Work with pre-split data
 
@@ -60,6 +59,44 @@ def tensor_image_array(directory, input_shape,row_dim):
             array_imgs[n,:,:,:] = img_tensor
             n += 1
     return array_imgs
+
+'''def defectdetection(input_shape, lr):
+    #Initialize the model
+    #model = Sequential()
+      
+    # Layer 1
+    # Conv 1
+    model.add(Conv2D(filters=6, kernel_size=(5, 5), strides=1, activation = 'relu', input_shape = input_shape))
+    # Pooling 1
+    model.add(MaxPooling2D(pool_size=(2, 2), strides = 2))
+      
+    # Layer 2
+    # Conv 2
+    model.add(Conv2D(filters=16, kernel_size=(5, 5), strides=1, activation='relu'))
+    # Pooling 2
+    model.add(MaxPooling2D(pool_size = 2, strides = 2))
+  
+    # Flatten
+    model.add(Flatten())
+      
+    # Layer 3
+    # Fully connected layer 1
+    model.add(Dense(units=120, activation='relu'))
+      
+    #Layer 4
+    #Fully connected layer 2
+    model.add(Dense(units=84, activation='relu'))
+      
+    #Layer 5
+    #Output Layer
+    model.add(Dense(units=10, activation='softmax'))
+  
+    opt = SGD(lr = lr) # stochastic gradient descent method with learning rate lr = 0.01    
+    model.compile(optimizer=opt, 
+        loss='categorical_crossentropy',
+        metrics=['accuracy','categorical_accuracy','categorical_crossentropy'])
+    
+    return model'''
 #####################################
 
 shapehw = 64
@@ -100,7 +137,7 @@ else:
 valid_imgs = valid_imgs.numpy()
 print(valid_imgs.shape)
 
-## Reshuffle
+### Reshuffle train and validation images
 
 randomize_train = np.arange(len(train_labels[:,1]))
 np.random.shuffle(randomize_train)
@@ -116,43 +153,43 @@ print('\n\nShuffled.\n\n')
 
 #####################################
 
-# We build the base model
-base_model = VGG16(weights='imagenet',
-    include_top=False,
-    input_shape=input_shape)
-base_model.summary()
+### Build the base model
 
-# Freeze layers in base model so they do not train;
-# want feature extractor to stay as before --> transfer learning
-for layer in base_model.layers:
-    '''if layer.name == 'block4_conv1':
-        break # Allow this layer to train
-    if layer.name == 'block5_conv1':
-        break # Allow this layer to train'''
-    layer.trainable = False
-    print('Layer ' + layer.name + ' frozen.')
+lr = 0.001
+model = models.Sequential()
+model.add(layers.experimental.preprocessing.Resizing(256, 256, interpolation="bilinear", input_shape=input_shape))
+model.add(layers.Conv2D(96, 11, strides=4, padding='same'))
+model.add(layers.Lambda(tf.nn.local_response_normalization))
+model.add(layers.Activation('relu'))
+model.add(layers.MaxPooling2D(3, strides=2))
+model.add(layers.Conv2D(128, 5, strides=4, padding='same'))
+model.add(layers.Lambda(tf.nn.local_response_normalization))
+model.add(layers.Activation('relu'))
+model.add(layers.MaxPooling2D(3, strides=2))
+model.add(layers.Conv2D(256, 3, strides=4, padding='same'))
+model.add(layers.Activation('relu'))
+model.add(layers.Conv2D(256, 3, strides=4, padding='same'))
+model.add(layers.Activation('relu'))
+model.add(layers.Conv2D(512, 3, strides=4, padding='same'))
+model.add(layers.Activation('relu'))
+model.add(layers.Flatten())
+model.add(layers.Dense(4096, activation='relu'))
+model.add(layers.Dropout(0.5))
+model.add(layers.Dense(800, activation='relu'))
+model.add(layers.Dropout(0.5))
+model.add(layers.Dense(train_size, activation='softmax'))
 
-# We take the last layer of our the model and add it to our classifier
-last = base_model.layers[-1].output
-x = Flatten()(last)
-x = Dense(800, activation='relu', name='fc1')(x) #800 #relu
-dropout=0.3#0.55
-x = Dropout(dropout)(x) #0.3
-x = Dense(train_size, activation='softmax', name='predictions')(x)#softmax
-
-model = Model(base_model.input, x)
-
-# We compile the model
-lr = 0.0001
-model.compile(optimizer=RMSprop(lr=lr), #lr=0.001
-    loss='categorical_crossentropy',
-    metrics=['accuracy','categorical_accuracy','categorical_crossentropy'])
 
 model.summary()
 
+opt = Adam(lr = lr) # stochastic gradient descent method with learning rate lr = 0.01    
+model.compile(optimizer=opt, 
+    loss='categorical_crossentropy',
+    metrics=['accuracy','categorical_accuracy','categorical_crossentropy'])
+
 #####################################
 
-# We start the training
+### Start the training
 epochs = 75
 batch_size = 256
 
@@ -160,10 +197,10 @@ wandb.config = {
   "learning_rate": lr,
   "epochs": epochs,
   "batch_size": batch_size,
-  "dropout_rate":dropout
+  "optimizer": opt
 }
 
-# We train it
+# Start training
 start_train = time.time()
 history = model.fit(train_imgs, train_labels,
     batch_size=batch_size,
@@ -173,8 +210,9 @@ history = model.fit(train_imgs, train_labels,
 end_train = time.time()
 training_time = (end_train-start_train)/60
 
+'''
 timestr = time.strftime("%Y%m%d%H%M")
-history_version = timestr+'_tl_vgg16_'+str(dropout)+'dropout_'+str(shapehw)+'inshape_'+str(lr)+'LR_'+str(epochs)+'epochs_'+str(batch_size)+'batch'
+history_version = timestr+'_tl_vgg16_'+str(shapehw)+'inshape_'+str(lr)+'LR_'+str(epochs)+'epochs_'+str(batch_size)+'batch'
 model.save('models/'+history_version+'.h5')
 
 #####################################
@@ -237,7 +275,7 @@ else:
 	print('No plots saved.\n')
 print('Program completed.\n')
 print("Training took: "+str(training_time)+" min.")
-
+'''
 
 '''
 # In[ ]:
