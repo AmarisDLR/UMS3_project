@@ -12,6 +12,7 @@
 
 import os
 import time
+import math
 import re
 import cv2
 import paramiko
@@ -274,7 +275,7 @@ def adjust_extrusion_amount(line,alt_amount):
 		if Ennn:
 			Ennn = Ennn[-1]
 			Ennn = re.findall(r'[-?\d.\d]+',Ennn)
-			Ennn_alt = float(Ennn[0]) + alt_amount
+			Ennn_alt = float(Ennn[0]) * alt_amount
 			line = line.replace("E"+Ennn[0],"E"+str(Ennn_alt))
 	return line
 
@@ -289,7 +290,7 @@ def adjust_feedrate_amount(line,alt_factor):
 	return line
 
 def adjust_coolingfan_speed(printer,PWM):
-	command = "sendgcode M106 S"+str(PWM)
+	command = "sendgcode M106 S"+str(255*PWM)
 	sendgcode(printer,command)
 
 ################  Log in to SSH  ##################
@@ -314,7 +315,7 @@ print(out)
 
 ################  Get Times Btwn Layers  ##################
 print("\n\n\n")
-gfile_name = "UMS3_random39_7infill_lines"
+gfile_name = "UMS3_random40_12infill_grid"
 gfile = "gcodeUM/"+gfile_name+".gcode" #input("Gcode file: <file.gcode> \n")
 
 times_file = "times.txt"
@@ -363,7 +364,7 @@ goal_X = 10
 fr_factor = 0.75 ### Feedrate adjustment factor
 alt_amount = -0.50 ### Extrusion adjustment amount
 alt_temp = -7 ### Temperature adjustment amount
-fanPWM = 255*0.9 ### <0-255>
+fanPWM = 0.9 ### <0-255>
 
 ################  Print Loop  ##################
 while True:
@@ -397,11 +398,12 @@ while True:
                 else:
                     line = adjust_feedrate_amount(line, 0.85)
                 ### Change extrusion amount by alt_amount
-                if layercount > 1 and linecount%25 == 0:
-                    alt_amount +=-.05
+                if layercount > 0:#1 and linecount%25 == 0:
+                    alt_amount = 0.5*math.sin(5*math.pi/final_line*linecount + math.pi/2)+0.5
                     line = adjust_extrusion_amount(line, alt_amount)
+                '''elif layercount >= 10 
                 else:
-                    line = adjust_extrusion_amount(line, alt_amount)
+                    line = adjust_extrusion_amount(line, alt_amount)'''
                 ### Change temperature by alt_temp
                 if linecount == 350:
                     extruder_temp += alt_temp

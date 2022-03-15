@@ -26,7 +26,7 @@ import wandb
 from wandb.keras import WandbCallback
 
 
-wandb.init(project="ums3", entity="amarisdlr")
+wandb.init(project="ums3_vgg16_mar15", entity="amarisdlr")
 
 ### Work with pre-split data
 
@@ -65,7 +65,7 @@ def tensor_image_array(directory, input_shape,row_dim):
 shapehw = 64
 input_shape = (shapehw,shapehw,3)
 
-base_dir = '../UMS3_dd_Mar08'
+base_dir = '../UMS3_dd_Mar15'
 train_dir = os.path.join(base_dir,'train')
 valid_dir = os.path.join(base_dir,'valid')
 
@@ -125,18 +125,24 @@ base_model.summary()
 # Freeze layers in base model so they do not train;
 # want feature extractor to stay as before --> transfer learning
 for layer in base_model.layers:
-    '''if layer.name == 'block4_conv1':
+    if layer.name == 'block1_conv1':
+        break # Allow this layer to train
+    if layer.name == 'block2_conv1':
+        break # Allow this layer to train
+    if layer.name == 'block3_conv1':
+        break # Allow this layer to train
+    if layer.name == 'block4_conv1':
         break # Allow this layer to train
     if layer.name == 'block5_conv1':
-        break # Allow this layer to train'''
+        break # Allow this layer to train
     layer.trainable = False
     print('Layer ' + layer.name + ' frozen.')
 
 # We take the last layer of our the model and add it to our classifier
 last = base_model.layers[-1].output
 x = Flatten()(last)
-x = Dense(800, activation='relu', name='fc1')(x) #800 #relu
-dropout=0.3#0.55
+x = Dense(350, activation='relu', name='fc1')(x) #800 #relu
+dropout=0.65#0.55
 x = Dropout(dropout)(x) #0.3
 x = Dense(train_size, activation='softmax', name='predictions')(x)#softmax
 
@@ -144,7 +150,7 @@ model = Model(base_model.input, x)
 
 # We compile the model
 lr = 0.0001
-model.compile(optimizer=RMSprop(lr=lr), #lr=0.001
+model.compile(optimizer=SGD(lr=lr), #lr=0.001
     loss='categorical_crossentropy',
     metrics=['accuracy','categorical_accuracy','categorical_crossentropy'])
 
