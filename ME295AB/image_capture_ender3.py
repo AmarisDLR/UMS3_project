@@ -1,3 +1,4 @@
+from turtle import width
 import cv2
 import time
 import calendar
@@ -16,8 +17,10 @@ def getCameraIndex(camName):
 def capture_img(path, camera, frame):
 	cam_fps = camera.get(cv2.CAP_PROP_FPS)
 	print('Capture Image at %.2f FPS.' %cam_fps)
+	WIDTHx = camera.get(cv2.CAP_PROP_FRAME_WIDTH)
+	HEIGHTy = camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
 	ts = calendar.timegm(time.gmtime())
-	imfile = path+str(ts)+'1_5fps_1600_1200.jpg'
+	imfile = path+str(ts)+'1_5fps_'+str(int(WIDTHx))+'W_'+str(int(HEIGHTy))+'H.jpg'
 
 	print(imfile)	
 	cv2.imwrite(filename=imfile, img=frame)
@@ -33,8 +36,8 @@ path = "E:/AM_Papers/Ender3/directory/"
 camIdx = getCameraIndex('IPEVO V4K')
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(camIdx,cv2.CAP_DSHOW)
-webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)		#1280    #1024   #640    #800   #3264
-webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)		#720	 #768    #480    #600   #2448
+webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1800)		#1280    #1024   #640    #800   #3264   #1600  
+webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1800)		#720	 #768    #480    #600   #2448   #1200
 #webcam.set(cv2.CAP_PROP_FPS, 15)			#10	 #15     #30     #25    #1.5
 
 webcam.set(cv2.CAP_PROP_AUTOFOCUS, 1)

@@ -125,7 +125,7 @@ def find_init_temperature(gfile):
 
 def set_temperature(ser, extruder_temp, bed_temp):
     command(ser,"M104 S"+str(extruder_temp))
-    command(ser,"M140 S"+str(bed_temp))
+    command(ser,"M140 S"+str(bed_temp+5))
 
 def adjust_extruder(ser, amount, retract):
     if retract == 1:
@@ -158,12 +158,12 @@ def adjust_extrusion_amount(line, alt_amount):
         if Ennn:
             Ennn = Ennn[-1]
             Ennn = re.findall(r'[-?\d.\d]+',Ennn)
-            Ennn_alt = float(Ennn[0]) + alt_amount
+            Ennn_alt = float(Ennn[0]) * alt_amount
             line = line.replace("E"+Ennn[0],"E"+str(Ennn_alt))
     return line
 
 def adjust_coolingfan_speed(ser,PWM):
-    command(ser,"M106 S"+str(PWM))
+    command(ser,"M106 S"+str(255*PWM))
 
 def video_capture(gfile_name, webcam, layerbreak):
     count = 1
@@ -186,9 +186,12 @@ def video_capture(gfile_name, webcam, layerbreak):
 
 def capture_image(gfile_name, webcam, frame, layerbreak):
     cam_fps = webcam.get(cv2.CAP_PROP_FPS)
-    print("Capture Image at %.2f FPS." %cam_fps)
     ts = time.strftime("%Y%m%d%H%M")
-    imfile = "E:/AM_Papers/Ender3/directory/"+str(ts)+"_"+gfile_name+"_"+str(layerbreak)+".jpg"
+    print("Capture Image at %.2f FPS." %cam_fps)
+    widthx = webcam.get(cv2.CAP_PROP_FRAME_WIDTH)
+    heighty = webcam.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    imxy = str(widthx)+'W_'+str(heighty)+'H_'
+    imfile = "E:/AM_Papers/Ender3/database/"+str(ts)+"_"+gfile_name+"_"+str(layerbreak)+"_"+str(imxy)+".jpg"
     print(imfile)
     cv2.imwrite(filename=imfile, img=frame)
     print("Image saved!")
@@ -234,7 +237,7 @@ time.sleep(1)
 
 ### Get times between layers
 print('\n\n\n')
-gfile_name = 'CE3_random5'
+gfile_name = 'CE3_calicat'
 gfile = "C:/Users/amari/Downloads/gcode_ender3/"+gfile_name+".gcode"
 times_file = "E:/AM_Papers/Ender3/times.txt"
 set_time_elapsed(gfile, times_file)
@@ -251,8 +254,8 @@ camIdx = getCameraIndex('IPEVO V4K') ## Enter camera name or 'unsure' to get
                                      ## desired index number
 key = cv2.waitKey(1)
 webcam = cv2.VideoCapture(camIdx,cv2.CAP_DSHOW)
-img_size_x = 1600
-img_size_y = 1200
+img_size_x = 2400
+img_size_y = 2400
 webcam.set(cv2.CAP_PROP_FRAME_WIDTH, img_size_x)
 webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, img_size_y)
 
@@ -271,17 +274,17 @@ time.sleep(2)
 
 goal_X = 25
 
-fr_factor = 0.755 ### Feedrate adjustment factor
-alt_amount = -5 ### Extrusion adjustment factor
-alt_temp = 15 ### Temperature adjustment factor
-fanPWM = 80 ### PWM <0-255>
+fr_factor = 0.775 ### Feedrate adjustment factor, percent
+alt_amount = 1 ### Extrusion adjustment factor, percent
+alt_temp = -8 ### Temperature adjustment factor, deg F
+fanPWM = 0.85 ### Fan Speed % (8-bit)
 
 ###### Print Loop ######
 while True:
     try:
         line = gfile_print.readline()
         endprint = re.findall(";Wipe out",line)
-        if not line or endprint or linecount == final_line:
+        if not line or endprint or linecount == final_line or layercount == 24:
             print("\nFinished printing.\n") ### End of g-code file
             adjust_extruder(ender3,-3,1 ) ## amount to retract in mm
             command(ender3,"G0 Y200 Z"+str(Z+10))
@@ -296,13 +299,16 @@ while True:
             
             ###### Change printer settings ######
             if linecount > 30:
-                if layercount >= 0:
+                if layercount >= 1:
                     line = adjust_feedrate_amount(line, fr_factor)
                 else:
                     line = adjust_feedrate_amount(line, 0.85)
                 ### Change extrusion amount by alt_amount
-                if linecount%75 == 0 or linecount%25 ==0:
-                    alt_amount +=-.75
+                if layercount > 1 and linecount%50 == 0 or linecount%25 ==0:
+                    alt_amount += -1/(final_line//8)
+                    line = adjust_extrusion_amount(line, alt_amount)
+                elif layercount >= 10 and layercount % 2:
+                    alt_amount += -1/(final_line//4)
                     line = adjust_extrusion_amount(line, alt_amount)
                 else:
                     line = adjust_extrusion_amount(line, alt_amount)
@@ -312,9 +318,9 @@ while True:
                     print("Extruder Temp: "+str(extruder_temp))
                     set_temperature(ender3, extruder_temp, bed_temp)
                 else:
-                    print(extruder_temp)
+                    pass
                 ### Change fan speed (PWM)
-                if layercount >= 0:
+                if layercount == 0:
                     adjust_coolingfan_speed(ender3,fanPWM)
             ###### Change printer settings ######
 
@@ -337,7 +343,7 @@ while True:
                     adjust_extruder(ender3,-8,1 ) ## amount to retract in mm
 
                     ### Position for Camera Capture
-                    goal_Z = Z + 55
+                    goal_Z = Z + 65
                     goal_Y = 135+(linecount%2)/10
                     command(ender3,"G0 Z"+str(goal_Z))
                     command(ender3,"G0 F5000 X"+str(goal_X)+" Y"+str(goal_Y)+" Z"+str(goal_Z))
